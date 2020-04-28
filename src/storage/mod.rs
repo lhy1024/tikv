@@ -243,6 +243,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                 {
                     let begin_instant = Instant::now_coarse();
                     let mut statistics = Statistics::default();
+
                     let snap_store = SnapshotStore::new(
                         snapshot,
                         start_ts,
@@ -259,7 +260,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                             KV_COMMAND_KEYREAD_HISTOGRAM_STATIC.get(CMD).observe(1_f64);
                             r
                         });
-
+                    info!("Get";"elapsed"=>begin_instant.elapsed_secs());
                     metrics::tls_collect_scan_details(CMD, &statistics);
                     metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
                     SCHED_PROCESSING_READ_HISTOGRAM_STATIC
@@ -511,6 +512,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     let res = scanner.scan(limit);
 
                     let statistics = scanner.take_statistics();
+
                     metrics::tls_collect_scan_details(CMD, &statistics);
                     metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
                     SCHED_PROCESSING_READ_HISTOGRAM_STATIC
