@@ -260,7 +260,7 @@ pub fn tls_collect_scan_details(cmd: ReqTag, stats: &Statistics) {
     });
 }
 
-pub fn tls_collect_read_flow(region_id: u64, statistics: &Statistics) {
+pub fn tls_collect_read_flow(region_id: u64, statistics: &Statistics) ->usize{
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
         m.local_read_stats.add_flow(
@@ -269,6 +269,7 @@ pub fn tls_collect_read_flow(region_id: u64, statistics: &Statistics) {
             &statistics.data.flow_stats,
         );
     });
+    statistics.write.flow_stats.read_bytes+statistics.data.flow_stats.read_bytes
 }
 
 pub fn tls_collect_qps(

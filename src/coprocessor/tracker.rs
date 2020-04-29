@@ -49,10 +49,14 @@ pub struct Tracker {
 
     // Intermediate results
     current_stage: TrackerState,
-    wait_time: Duration,          // Total wait time
-    schedule_wait_time: Duration, // Wait time spent on waiting for scheduling
-    snapshot_wait_time: Duration, // Wait time spent on waiting for a snapshot
-    handler_build_time: Duration, // Time spent on building the handler (not included in total wait time)
+    wait_time: Duration,
+    // Total wait time
+    schedule_wait_time: Duration,
+    // Wait time spent on waiting for scheduling
+    snapshot_wait_time: Duration,
+    // Wait time spent on waiting for a snapshot
+    handler_build_time: Duration,
+    // Time spent on building the handler (not included in total wait time)
     req_time: Duration,
     item_process_time: Duration,
     total_process_time: Duration,
@@ -279,8 +283,8 @@ impl Tracker {
             .inc_by(self.total_perf_stats.0.decrypt_data_nanos as i64);
 
         tls_collect_scan_details(self.req_ctx.tag, &total_storage_stats);
-        tls_collect_read_flow(self.req_ctx.context.get_region_id(), &total_storage_stats);
-
+        let bytes = tls_collect_read_flow(self.req_ctx.context.get_region_id(), &total_storage_stats);
+        info!("cop";"elapsed"=>self.total_process_time.as_secs(),"bytes"=>bytes,"id"=>self.req_ctx.context.get_region_id());
         let peer = self.req_ctx.context.get_peer();
         let region_id = self.req_ctx.context.get_region_id();
         let start_key = &self.req_ctx.lower_bound;
