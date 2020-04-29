@@ -284,7 +284,11 @@ impl Tracker {
 
         tls_collect_scan_details(self.req_ctx.tag, &total_storage_stats);
         let bytes = tls_collect_read_flow(self.req_ctx.context.get_region_id(), &total_storage_stats);
-        info!("cop";"elapsed"=>self.total_process_time.as_secs(),"bytes"=>bytes,"id"=>self.req_ctx.context.get_region_id());
+        info!("cop";
+            "elapsed"=>self.total_process_time.as_secs(),
+            "bytes"=>bytes,
+            "id"=>self.req_ctx.context.get_region_id(),
+            "tag"=>to_string(&self.req_ctx.tag));
         let peer = self.req_ctx.context.get_peer();
         let region_id = self.req_ctx.context.get_region_id();
         let start_key = &self.req_ctx.lower_bound;
@@ -298,6 +302,19 @@ impl Tracker {
         tls_collect_qps(region_id, peer, start_key, end_key, reverse_scan);
         self.current_stage = TrackerState::Tracked;
     }
+}
+
+pub fn to_string(tag:&ReqTag)->String{
+    let tag = match tag{
+        select=>"select",
+        index=>"index",
+        analyze_table=>"analyze_table",
+        analyze_index=>"analyze_index",
+        checksum_table=>"checksum_table",
+        checksum_index=>"checksum_index",
+        test=>"test",
+    };
+    tag.to_string()
 }
 
 impl Drop for Tracker {
