@@ -260,9 +260,10 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                             KV_COMMAND_KEYREAD_HISTOGRAM_STATIC.get(CMD).observe(1_f64);
                             r
                         });
-                    info!("Get";"elapsed"=>begin_instant.elapsed_secs());
+
                     metrics::tls_collect_scan_details(CMD, &statistics);
-                    metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    let bytes=metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    info!("get";"elapsed"=>begin_instant.elapsed_secs(),"bytes"=>bytes);
                     SCHED_PROCESSING_READ_HISTOGRAM_STATIC
                         .get(CMD)
                         .observe(begin_instant.elapsed_secs());
@@ -425,7 +426,8 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                         });
 
                     metrics::tls_collect_scan_details(CMD, &statistics);
-                    metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    let bytes=metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    info!("batch_get";"elapsed"=>begin_instant.elapsed_secs(),"bytes"=>bytes);
                     SCHED_PROCESSING_READ_HISTOGRAM_STATIC
                         .get(CMD)
                         .observe(begin_instant.elapsed_secs());
@@ -514,7 +516,8 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     let statistics = scanner.take_statistics();
 
                     metrics::tls_collect_scan_details(CMD, &statistics);
-                    metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    let bytes=metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    info!("scan";"elapsed"=>begin_instant.elapsed_secs(),"bytes"=>bytes);
                     SCHED_PROCESSING_READ_HISTOGRAM_STATIC
                         .get(CMD)
                         .observe(begin_instant.elapsed_secs());
@@ -656,7 +659,8 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                         let mut stats = Statistics::default();
                         stats.data.flow_stats.read_keys = 1;
                         stats.data.flow_stats.read_bytes = key_len + value.len();
-                        tls_collect_read_flow(ctx.get_region_id(), &stats);
+                        let bytes=metrics::tls_collect_read_flow(ctx.get_region_id(), &stats);
+                        info!("raw_get";"elapsed"=>begin_instant.elapsed_secs(),"bytes"=>bytes);
                         KV_COMMAND_KEYREAD_HISTOGRAM_STATIC.get(CMD).observe(1_f64);
                     }
 
@@ -790,7 +794,8 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     KV_COMMAND_KEYREAD_HISTOGRAM_STATIC
                         .get(CMD)
                         .observe(stats.data.flow_stats.read_keys as f64);
-                    tls_collect_read_flow(ctx.get_region_id(), &stats);
+                    let bytes=metrics::tls_collect_read_flow(ctx.get_region_id(), &stats);
+                    info!("raw_batch_get";"elapsed"=>begin_instant.elapsed_secs(),"bytes"=>bytes);
                     SCHED_PROCESSING_READ_HISTOGRAM_STATIC
                         .get(CMD)
                         .observe(begin_instant.elapsed_secs());
@@ -1088,7 +1093,8 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                         .map_err(Error::from)
                     };
 
-                    metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    let bytes=metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    info!("raw_scan";"elapsed"=>begin_instant.elapsed_secs(),"bytes"=>bytes);
                     KV_COMMAND_KEYREAD_HISTOGRAM_STATIC
                         .get(CMD)
                         .observe(statistics.write.flow_stats.read_keys as f64);
@@ -1222,7 +1228,8 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                         ));
                     }
                     tls_collect_qps_batch(ctx.get_region_id(), ctx.get_peer(), key_ranges);
-                    metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    let bytes=metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
+                    info!("raw_batch_scan";"elapsed"=>begin_instant.elapsed_secs(),"bytes"=>bytes);
                     KV_COMMAND_KEYREAD_HISTOGRAM_STATIC
                         .get(CMD)
                         .observe(statistics.write.flow_stats.read_keys as f64);
