@@ -548,18 +548,23 @@ where
         // so we use sync-log flag here.
         let is_synced = self.write_to_db();
 
+        let mut cnt =0;
         if !self.apply_res.is_empty() {
             for res in self.apply_res.drain(..) {
+                info!("written bytes";"id"=>&res.region_id,
+                    "written_bytes"=>res.metrics.written_bytes);
                 self.notifier.notify(
                     res.region_id,
                     PeerMsg::ApplyRes {
                         res: TaskRes::Apply(res),
                     },
                 );
+                cnt+=1;
             }
         }
 
         let elapsed = t.elapsed();
+        info!("witten bytes";"elapsed"=>elapsed.as_secs(),"cnt"=>cnt);
         STORE_APPLY_LOG_HISTOGRAM.observe(duration_to_sec(elapsed) as f64);
 
         slow_log!(
