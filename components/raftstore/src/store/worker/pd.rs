@@ -16,6 +16,7 @@ use kvproto::pdpb;
 use kvproto::raft_cmdpb::{AdminCmdType, AdminRequest, RaftCmdRequest, SplitRequest};
 use kvproto::raft_serverpb::RaftMessage;
 use kvproto::replication_modepb::RegionReplicationStatus;
+// use pd_client::metrics::GrpcTypeKind;
 use prometheus::local::LocalHistogram;
 use raft::eraftpb::ConfChangeType;
 
@@ -33,11 +34,11 @@ use crate::store::{CasualMessage, PeerMsg, RaftCommand, RaftRouter, SignificantM
 use pd_client::metrics::*;
 use pd_client::{Error, PdClient, RegionStat};
 use tikv_util::collections::HashMap;
+use tikv_util::metrics::convert_record_pairs;
+use tikv_util::metrics::RecordPairVec;
 use tikv_util::metrics::ThreadInfoStatistics;
 use tikv_util::time::UnixSecs;
 use tikv_util::worker::{FutureRunnable as Runnable, FutureScheduler as Scheduler, Stopped};
-
-type RecordPairVec = Vec<pdpb::RecordPair>;
 
 #[derive(Default, Debug, Clone)]
 pub struct FlowStatistics {
@@ -177,6 +178,39 @@ pub struct PeerStat {
     pub last_written_bytes: u64,
     pub last_written_keys: u64,
     pub last_report_ts: UnixSecs,
+    pub grpc_infos: GrpcInfos,
+    pub last_grpc_infos: GrpcInfos,
+}
+
+#[derive(Default, Clone)]
+pub struct GrpcInfos {
+    pub infos: HashMap<String, u64>,
+}
+
+impl GrpcInfos {
+    pub fn add(&mut self, other: &GrpcInfos) {
+        for (kind, other_qps) in other.infos.iter() {
+            let qps = self.infos.entry(kind.to_string()).or_insert(0);
+            *qps += *other_qps;
+        }
+    }
+
+    pub fn sub(&mut self, other: &GrpcInfos) {
+        for (kind, qps) in self.infos.iter_mut() {
+            if let Some(other_qps) = other.infos.get(kind) {
+                *qps -= *other_qps;
+            }
+        }
+    }
+
+    pub fn convert_record_pairs(&self) -> RecordPairVec {
+        // let mut res = HashMap::default();
+        // for (k, v) in self.infos.iter() {
+        //     let typ = format!("{:}", k);
+        //     res.entry(typ).or_insert(*v);
+        // }
+        convert_record_pairs(self.infos.clone())
+    }
 }
 
 impl<E> Display for Task<E>
@@ -258,18 +292,6 @@ where
 
 const DEFAULT_QPS_INFO_INTERVAL: Duration = Duration::from_secs(1);
 const DEFAULT_COLLECT_INTERVAL: Duration = Duration::from_secs(1);
-
-#[inline]
-fn convert_record_pairs(m: HashMap<String, u64>) -> RecordPairVec {
-    m.into_iter()
-        .map(|(k, v)| {
-            let mut pair = pdpb::RecordPair::default();
-            pair.set_key(k);
-            pair.set_value(v);
-            pair
-        })
-        .collect()
-}
 
 struct StatsMonitor<E>
 where
@@ -889,6 +911,13 @@ where
             self.store_stat.engine_total_bytes_read += stats.read_bytes as u64;
             self.store_stat.engine_total_keys_read += stats.read_keys as u64;
         }
+        // for (region_id, region_info) in &read_stats.region_infos {
+        //     let peer_stat = self
+        //         .region_peers
+        //         .entry(*region_id)
+        //         .or_insert_with(PeerStat::default);
+        //     peer_stat.read_qps += region_info.qps as u64;
+        // }
         if !read_stats.region_infos.is_empty() {
             if let Some(sender) = self.stats_monitor.get_sender() {
                 sender.send(read_stats).unwrap();
@@ -1001,11 +1030,14 @@ where
                     written_bytes_delta,
                     written_keys_delta,
                     last_report_ts,
+                    grpc_infos_delta,
                 ) = {
                     let peer_stat = self
                         .region_peers
                         .entry(region.get_id())
                         .or_insert_with(PeerStat::default);
+                    peer_stat.grpc_infos.sub(&peer_stat.last_grpc_infos);
+
                     let read_bytes_delta = peer_stat.read_bytes - peer_stat.last_read_bytes;
                     let read_keys_delta = peer_stat.read_keys - peer_stat.last_read_keys;
                     let written_bytes_delta = written_bytes - peer_stat.last_written_bytes;
@@ -1015,6 +1047,7 @@ where
                     peer_stat.last_written_keys = written_keys;
                     peer_stat.last_read_bytes = peer_stat.read_bytes;
                     peer_stat.last_read_keys = peer_stat.read_keys;
+                    peer_stat.last_grpc_infos = peer_stat.grpc_infos.clone();
                     peer_stat.last_report_ts = UnixSecs::now();
                     if last_report_ts.is_zero() {
                         last_report_ts = self.start_ts;
@@ -1025,6 +1058,7 @@ where
                         written_bytes_delta,
                         written_keys_delta,
                         last_report_ts,
+                        peer_stat.grpc_infos.convert_record_pairs(),
                     )
                 };
                 self.handle_heartbeat(
@@ -1039,6 +1073,7 @@ where
                         written_keys: written_keys_delta,
                         read_bytes: read_bytes_delta,
                         read_keys: read_keys_delta,
+                        grpc_infos: grpc_infos_delta,
                         approximate_size,
                         approximate_keys,
                         last_report_ts,

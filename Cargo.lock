@@ -1966,7 +1966,7 @@ dependencies = [
 [[package]]
 name = "kvproto"
 version = "0.0.2"
-source = "git+https://github.com/pingcap/kvproto.git#c3b73d03dde2f54154d396f44dc9a25c3e8bdb79"
+source = "git+https://github.com/lhy1024/kvproto.git?branch=rp#d60d234d2b0570fac46602cb402c4aa64a5c712d"
 dependencies = [
  "futures 0.1.29",
  "grpcio",
@@ -4723,6 +4723,7 @@ dependencies = [
  "fxhash",
  "grpcio",
  "hex 0.4.2",
+ "kvproto",
  "lazy_static",
  "libc",
  "log",

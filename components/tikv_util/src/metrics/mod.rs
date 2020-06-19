@@ -3,8 +3,12 @@
 use std::thread;
 use std::time::Duration;
 
+use kvproto::pdpb;
 use prometheus::*;
 
+use super::collections::HashMap;
+
+pub type RecordPairVec = Vec<pdpb::RecordPair>;
 #[cfg(target_os = "linux")]
 mod threads_linux;
 #[cfg(target_os = "linux")]
@@ -87,4 +91,15 @@ lazy_static! {
         &["type"]
     )
     .unwrap();
+}
+
+pub fn convert_record_pairs(m: HashMap<String, u64>) -> RecordPairVec {
+    m.into_iter()
+        .map(|(k, v)| {
+            let mut pair = pdpb::RecordPair::default();
+            pair.set_key(k);
+            pair.set_value(v);
+            pair
+        })
+        .collect()
 }
