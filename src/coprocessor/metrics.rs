@@ -10,6 +10,7 @@ use raftstore::store::ReadStats;
 use tikv_util::collections::HashMap;
 
 use crate::server::metrics::{GcKeysCF, GcKeysDetail};
+use pd_client::metrics::GrpcTypeKind;
 use prometheus::*;
 use prometheus_static_metric::*;
 
@@ -281,6 +282,7 @@ pub fn tls_collect_qps(
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
         let key_range = build_key_range(start_key, end_key, reverse_scan);
-        m.local_read_stats.add_qps(region_id, peer, key_range);
+        m.local_read_stats
+            .add_qps(region_id, peer, key_range, GrpcTypeKind::Coprocessor);
     });
 }

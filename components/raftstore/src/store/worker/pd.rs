@@ -16,7 +16,6 @@ use kvproto::pdpb;
 use kvproto::raft_cmdpb::{AdminCmdType, AdminRequest, RaftCmdRequest, SplitRequest};
 use kvproto::raft_serverpb::RaftMessage;
 use kvproto::replication_modepb::RegionReplicationStatus;
-// use pd_client::metrics::GrpcTypeKind;
 use prometheus::local::LocalHistogram;
 use raft::eraftpb::ConfChangeType;
 
@@ -25,7 +24,7 @@ use crate::store::cmd_resp::new_error;
 use crate::store::metrics::*;
 use crate::store::util::is_epoch_stale;
 use crate::store::util::KeysInfoFormatter;
-use crate::store::worker::split_controller::{SplitInfo, TOP_N};
+use crate::store::worker::split_controller::{GrpcInfos, SplitInfo, TOP_N};
 use crate::store::worker::{AutoSplitController, ReadStats};
 use crate::store::Callback;
 use crate::store::StoreInfo;
@@ -180,37 +179,6 @@ pub struct PeerStat {
     pub last_report_ts: UnixSecs,
     pub grpc_infos: GrpcInfos,
     pub last_grpc_infos: GrpcInfos,
-}
-
-#[derive(Default, Clone)]
-pub struct GrpcInfos {
-    pub infos: HashMap<String, u64>,
-}
-
-impl GrpcInfos {
-    pub fn add(&mut self, other: &GrpcInfos) {
-        for (kind, other_qps) in other.infos.iter() {
-            let qps = self.infos.entry(kind.to_string()).or_insert(0);
-            *qps += *other_qps;
-        }
-    }
-
-    pub fn sub(&mut self, other: &GrpcInfos) {
-        for (kind, qps) in self.infos.iter_mut() {
-            if let Some(other_qps) = other.infos.get(kind) {
-                *qps -= *other_qps;
-            }
-        }
-    }
-
-    pub fn convert_record_pairs(&self) -> RecordPairVec {
-        // let mut res = HashMap::default();
-        // for (k, v) in self.infos.iter() {
-        //     let typ = format!("{:}", k);
-        //     res.entry(typ).or_insert(*v);
-        // }
-        convert_record_pairs(self.infos.clone())
-    }
 }
 
 impl<E> Display for Task<E>

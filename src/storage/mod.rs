@@ -49,6 +49,7 @@ use engine_traits::{IterOptions, DATA_KEY_PREFIX_LEN};
 use futures::Future;
 use futures03::prelude::*;
 use kvproto::kvrpcpb::{CommandPri, Context, GetRequest, KeyRange, RawGetRequest};
+use pd_client::metrics::GrpcTypeKind;
 use raftstore::store::util::build_key_range;
 use rand::prelude::*;
 use std::sync::{atomic, Arc};
@@ -226,7 +227,14 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
         let res = self.read_pool.spawn_handle(
             async move {
                 if let Ok(key) = key.to_owned().into_raw() {
-                    tls_collect_qps(ctx.get_region_id(), ctx.get_peer(), &key, &key, false);
+                    tls_collect_qps(
+                        ctx.get_region_id(),
+                        ctx.get_peer(),
+                        &key,
+                        &key,
+                        false,
+                        GrpcTypeKind::KvGet,
+                    );
                 }
 
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
@@ -302,6 +310,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                             &key,
                             &key,
                             false,
+                            GrpcTypeKind::KvBatchGetCommand,
                         );
                     }
                 }
@@ -378,7 +387,12 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                         key_ranges.push(build_key_range(&key, &key, false));
                     }
                 }
-                tls_collect_qps_batch(ctx.get_region_id(), ctx.get_peer(), key_ranges);
+                tls_collect_qps_batch(
+                    ctx.get_region_id(),
+                    ctx.get_peer(),
+                    key_ranges,
+                    GrpcTypeKind::KvBatchGet,
+                );
 
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                 SCHED_COMMANDS_PRI_COUNTER_VEC_STATIC
@@ -476,6 +490,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                         &start_key,
                         &key,
                         reverse_scan,
+                        GrpcTypeKind::KvScan,
                     );
                 }
 
@@ -634,7 +649,14 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
 
         let res = self.read_pool.spawn_handle(
             async move {
-                tls_collect_qps(ctx.get_region_id(), ctx.get_peer(), &key, &key, false);
+                tls_collect_qps(
+                    ctx.get_region_id(),
+                    ctx.get_peer(),
+                    &key,
+                    &key,
+                    false,
+                    GrpcTypeKind::RawGet,
+                );
 
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                 SCHED_COMMANDS_PRI_COUNTER_VEC_STATIC
@@ -698,6 +720,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                             &key,
                             &key,
                             false,
+                            GrpcTypeKind::RawBatchGetCommand,
                         );
                     }
                 }
@@ -752,7 +775,12 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                 for key in &keys {
                     key_ranges.push(build_key_range(key, key, false));
                 }
-                tls_collect_qps_batch(ctx.get_region_id(), ctx.get_peer(), key_ranges);
+                tls_collect_qps_batch(
+                    ctx.get_region_id(),
+                    ctx.get_peer(),
+                    key_ranges,
+                    GrpcTypeKind::RawBatchGet,
+                );
 
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                 SCHED_COMMANDS_PRI_COUNTER_VEC_STATIC
@@ -1045,6 +1073,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                         &start_key,
                         &end_key,
                         reverse_scan,
+                        GrpcTypeKind::RawScan,
                     );
                 }
 
@@ -1219,7 +1248,12 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                             reverse_scan,
                         ));
                     }
-                    tls_collect_qps_batch(ctx.get_region_id(), ctx.get_peer(), key_ranges);
+                    tls_collect_qps_batch(
+                        ctx.get_region_id(),
+                        ctx.get_peer(),
+                        key_ranges,
+                        GrpcTypeKind::RawBatchScan,
+                    );
                     metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
                     KV_COMMAND_KEYREAD_HISTOGRAM_STATIC
                         .get(CMD)

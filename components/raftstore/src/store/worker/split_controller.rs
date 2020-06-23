@@ -10,8 +10,11 @@ use kvproto::metapb::Peer;
 
 use rand::Rng;
 
+use pd_client::metrics::GrpcTypeKind;
 use tikv_util::collections::HashMap;
 use tikv_util::config::Tracker;
+use tikv_util::metrics::convert_record_pairs;
+use tikv_util::metrics::RecordPairVec;
 
 use txn_types::Key;
 
@@ -252,10 +255,47 @@ impl Recorder {
     }
 }
 
+#[derive(Clone, Default, Debug)]
+pub struct GrpcInfos {
+    pub infos: HashMap<String, u64>,
+}
+
+impl GrpcInfos {
+    pub fn insert_or_update(&mut self, kind: GrpcTypeKind, other_qps: u64) {
+        let qps = self.infos.entry(kind.to_string()).or_insert(0);
+        *qps += other_qps;
+    }
+
+    pub fn add(&mut self, other: &GrpcInfos) {
+        for (kind, other_qps) in other.infos.iter() {
+            let qps = self.infos.entry(kind.to_string()).or_insert(0);
+            *qps += *other_qps;
+        }
+    }
+
+    pub fn sub(&mut self, other: &GrpcInfos) {
+        for (kind, qps) in self.infos.iter_mut() {
+            if let Some(other_qps) = other.infos.get(kind) {
+                *qps -= *other_qps;
+            }
+        }
+    }
+
+    pub fn convert_record_pairs(&self) -> RecordPairVec {
+        // let mut res = HashMap::default();
+        // for (k, v) in self.infos.iter() {
+        //     let typ = format!("{:}", k);
+        //     res.entry(typ).or_insert(*v);
+        // }
+        convert_record_pairs(self.infos.clone())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ReadStats {
     pub flows: HashMap<u64, FlowStatistics>,
     pub region_infos: HashMap<u64, RegionInfo>,
+    pub grpc_infos: GrpcInfos,
     pub sample_num: usize,
 }
 
@@ -265,21 +305,36 @@ impl ReadStats {
             sample_num: DEFAULT_SAMPLE_NUM,
             region_infos: HashMap::default(),
             flows: HashMap::default(),
+            grpc_infos: GrpcInfos::default(),
         }
     }
 
-    pub fn add_qps(&mut self, region_id: u64, peer: &Peer, key_range: KeyRange) {
-        self.add_qps_batch(region_id, peer, vec![key_range]);
+    pub fn add_qps(
+        &mut self,
+        region_id: u64,
+        peer: &Peer,
+        key_range: KeyRange,
+        kind: GrpcTypeKind,
+    ) {
+        self.add_qps_batch(region_id, peer, vec![key_range], kind);
     }
 
-    pub fn add_qps_batch(&mut self, region_id: u64, peer: &Peer, key_ranges: Vec<KeyRange>) {
+    pub fn add_qps_batch(
+        &mut self,
+        region_id: u64,
+        peer: &Peer,
+        key_ranges: Vec<KeyRange>,
+        kind: GrpcTypeKind,
+    ) {
         let num = self.sample_num;
+        let qps = key_ranges.len();
         let region_info = self
             .region_infos
             .entry(region_id)
             .or_insert_with(|| RegionInfo::new(num));
         region_info.update_peer(peer);
         region_info.add_key_ranges(key_ranges);
+        self.grpc_infos.insert_or_update(kind, qps as u64);
     }
 
     pub fn add_flow(&mut self, region_id: u64, write: &FlowStatistics, data: &FlowStatistics) {
