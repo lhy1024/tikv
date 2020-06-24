@@ -26,4 +26,4 @@ pub use self::region::{
 };
 pub use self::split_check::{KeyEntry, Runner as SplitCheckRunner, Task as SplitCheckTask};
 pub use self::split_config::{SplitConfig, SplitConfigManager};
-pub use self::split_controller::{AutoSplitController, GrpcInfos, ReadStats};
+pub use self::split_controller::{AutoSplitController, GrpcInfo, ReadStats};

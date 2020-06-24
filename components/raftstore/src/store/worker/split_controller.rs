@@ -100,6 +100,7 @@ pub struct RegionInfo {
     pub qps: usize,
     pub peer: Peer,
     pub key_ranges: Vec<KeyRange>,
+    pub grpc_info: GrpcInfo,
 }
 
 impl RegionInfo {
@@ -132,6 +133,10 @@ impl RegionInfo {
                 }
             }
         }
+    }
+
+    fn add_grpc_info(&mut self, kind: GrpcTypeKind, other_qps: u64) {
+        self.grpc_info.insert_or_update(kind, other_qps);
     }
 
     fn update_peer(&mut self, peer: &Peer) {
@@ -256,38 +261,21 @@ impl Recorder {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct GrpcInfos {
+pub struct GrpcInfo {
     pub infos: HashMap<String, u64>,
 }
 
-impl GrpcInfos {
+impl GrpcInfo {
     pub fn insert_or_update(&mut self, kind: GrpcTypeKind, other_qps: u64) {
         let qps = self.infos.entry(kind.to_string()).or_insert(0);
         *qps += other_qps;
     }
 
-    pub fn add(&mut self, other: &GrpcInfos) {
+    pub fn add(&mut self, other: &GrpcInfo) {
         for (kind, other_qps) in other.infos.iter() {
             let qps = self.infos.entry(kind.to_string()).or_insert(0);
             *qps += *other_qps;
         }
-    }
-
-    pub fn sub(&mut self, other: &GrpcInfos) {
-        for (kind, qps) in self.infos.iter_mut() {
-            if let Some(other_qps) = other.infos.get(kind) {
-                *qps -= *other_qps;
-            }
-        }
-    }
-
-    pub fn convert_record_pairs(&self) -> RecordPairVec {
-        // let mut res = HashMap::default();
-        // for (k, v) in self.infos.iter() {
-        //     let typ = format!("{:}", k);
-        //     res.entry(typ).or_insert(*v);
-        // }
-        convert_record_pairs(self.infos.clone())
     }
 }
 
@@ -295,7 +283,6 @@ impl GrpcInfos {
 pub struct ReadStats {
     pub flows: HashMap<u64, FlowStatistics>,
     pub region_infos: HashMap<u64, RegionInfo>,
-    pub grpc_infos: GrpcInfos,
     pub sample_num: usize,
 }
 
@@ -305,7 +292,6 @@ impl ReadStats {
             sample_num: DEFAULT_SAMPLE_NUM,
             region_infos: HashMap::default(),
             flows: HashMap::default(),
-            grpc_infos: GrpcInfos::default(),
         }
     }
 
@@ -327,14 +313,14 @@ impl ReadStats {
         kind: GrpcTypeKind,
     ) {
         let num = self.sample_num;
-        let qps = key_ranges.len();
+        let qps = key_ranges.len() as u64;
         let region_info = self
             .region_infos
             .entry(region_id)
             .or_insert_with(|| RegionInfo::new(num));
         region_info.update_peer(peer);
         region_info.add_key_ranges(key_ranges);
-        self.grpc_infos.insert_or_update(kind, qps as u64);
+        region_info.add_grpc_info(kind, qps);
     }
 
     pub fn add_flow(&mut self, region_id: u64, write: &FlowStatistics, data: &FlowStatistics) {

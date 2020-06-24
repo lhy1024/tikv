@@ -317,7 +317,7 @@ impl PdClient for RpcClient {
         req.set_keys_written(region_stat.written_keys);
         req.set_bytes_read(region_stat.read_bytes);
         req.set_keys_read(region_stat.read_keys);
-        req.set_grpc_infos(region_stat.grpc_infos.clone().into());
+        req.set_grpc_info(region_stat.grpc_info.clone().into());
         req.set_approximate_size(region_stat.approximate_size);
         req.set_approximate_keys(region_stat.approximate_keys);
         if let Some(s) = replication_status {

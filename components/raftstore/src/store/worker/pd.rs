@@ -1,6 +1,7 @@
 // Copyright 2016 TiKV Project Authors. Licensed under Apache-2.0.
 
 use std::fmt::{self, Display, Formatter};
+use std::mem;
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
@@ -24,7 +25,7 @@ use crate::store::cmd_resp::new_error;
 use crate::store::metrics::*;
 use crate::store::util::is_epoch_stale;
 use crate::store::util::KeysInfoFormatter;
-use crate::store::worker::split_controller::{GrpcInfos, SplitInfo, TOP_N};
+use crate::store::worker::split_controller::{GrpcInfo, SplitInfo, TOP_N};
 use crate::store::worker::{AutoSplitController, ReadStats};
 use crate::store::Callback;
 use crate::store::StoreInfo;
@@ -177,8 +178,7 @@ pub struct PeerStat {
     pub last_written_bytes: u64,
     pub last_written_keys: u64,
     pub last_report_ts: UnixSecs,
-    pub grpc_infos: GrpcInfos,
-    pub last_grpc_infos: GrpcInfos,
+    pub grpc_info: GrpcInfo,
 }
 
 impl<E> Display for Task<E>
@@ -879,16 +879,17 @@ where
             self.store_stat.engine_total_bytes_read += stats.read_bytes as u64;
             self.store_stat.engine_total_keys_read += stats.read_keys as u64;
         }
-        // for (region_id, region_info) in &read_stats.region_infos {
-        //     let peer_stat = self
-        //         .region_peers
-        //         .entry(*region_id)
-        //         .or_insert_with(PeerStat::default);
-        //     peer_stat.read_qps += region_info.qps as u64;
-        // }
+
         if !read_stats.region_infos.is_empty() {
             if let Some(sender) = self.stats_monitor.get_sender() {
                 sender.send(read_stats).unwrap();
+            }
+            for (region_id, region_info) in &read_stats.region_infos {
+                let peer_stat = self
+                    .region_peers
+                    .entry(*region_id)
+                    .or_insert_with(PeerStat::default);
+                peer_stat.grpc_info.add(&region_info.grpc_info);
             }
         }
     }
@@ -998,25 +999,27 @@ where
                     written_bytes_delta,
                     written_keys_delta,
                     last_report_ts,
-                    grpc_infos_delta,
+                    grpc_info,
                 ) = {
                     let peer_stat = self
                         .region_peers
                         .entry(region.get_id())
                         .or_insert_with(PeerStat::default);
-                    peer_stat.grpc_infos.sub(&peer_stat.last_grpc_infos);
 
                     let read_bytes_delta = peer_stat.read_bytes - peer_stat.last_read_bytes;
                     let read_keys_delta = peer_stat.read_keys - peer_stat.last_read_keys;
                     let written_bytes_delta = written_bytes - peer_stat.last_written_bytes;
                     let written_keys_delta = written_keys - peer_stat.last_written_keys;
                     let mut last_report_ts = peer_stat.last_report_ts;
+                    let mut grpc_info = GrpcInfo::default();
+                    mem::swap(&mut peer_stat.grpc_info, &mut grpc_info);
+
                     peer_stat.last_written_bytes = written_bytes;
                     peer_stat.last_written_keys = written_keys;
                     peer_stat.last_read_bytes = peer_stat.read_bytes;
                     peer_stat.last_read_keys = peer_stat.read_keys;
-                    peer_stat.last_grpc_infos = peer_stat.grpc_infos.clone();
                     peer_stat.last_report_ts = UnixSecs::now();
+
                     if last_report_ts.is_zero() {
                         last_report_ts = self.start_ts;
                     }
@@ -1026,7 +1029,7 @@ where
                         written_bytes_delta,
                         written_keys_delta,
                         last_report_ts,
-                        peer_stat.grpc_infos.convert_record_pairs(),
+                        convert_record_pairs(grpc_info.infos),
                     )
                 };
                 self.handle_heartbeat(
@@ -1041,7 +1044,7 @@ where
                         written_keys: written_keys_delta,
                         read_bytes: read_bytes_delta,
                         read_keys: read_keys_delta,
-                        grpc_infos: grpc_infos_delta,
+                        grpc_info,
                         approximate_size,
                         approximate_keys,
                         last_report_ts,
