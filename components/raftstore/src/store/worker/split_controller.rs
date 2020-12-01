@@ -138,6 +138,30 @@ impl RegionInfo {
     }
 }
 
+#[derive(PartialEq, Eq)]
+pub struct RegionStat {
+    pub region_id: u64,
+    pub qps: u64,
+}
+
+impl RegionStat {
+    fn new(region_id: u64, qps: u64) -> RegionStat {
+        RegionStat { region_id, qps }
+    }
+}
+
+impl PartialOrd for RegionStat {
+    fn partial_cmp(&self, rhs: &RegionStat) -> Option<Ordering> {
+        Some(self.qps.cmp(&rhs.qps))
+    }
+}
+
+impl Ord for RegionStat {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.qps.cmp(&other.qps)
+    }
+}
+
 pub struct Recorder {
     pub detect_num: u64,
     pub peer: Peer,
@@ -172,7 +196,7 @@ impl Recorder {
         self.times >= self.detect_num
     }
 
-    fn collect(&mut self, config: &SplitConfig) -> Vec<u8> {
+    fn collect(&mut self, config: &SplitConfig, region_id: u64) -> Vec<u8> {
         let pre_sum = prefix_sum(self.key_ranges.iter(), Vec::len);
         let key_ranges = self.key_ranges.clone();
         let mut samples = sample(config.sample_num, &pre_sum, key_ranges, |x| x)
@@ -189,6 +213,7 @@ impl Recorder {
             config.split_balance_score,
             config.split_contained_score,
             config.sample_threshold,
+            region_id,
         )
     }
 
@@ -221,10 +246,18 @@ impl Recorder {
         split_balance_score: f64,
         split_contained_score: f64,
         sample_threshold: i32,
+        region_id: u64,
     ) -> Vec<u8> {
         let mut best_index: i32 = -1;
         let mut best_score = 2.0;
         for (index, sample) in samples.iter().enumerate() {
+            info!("sampled";
+            "region_id"=>region_id,
+            "contained"=>sample.contained,
+            "left"=> sample.left,
+            "right"=>sample.right);
+            info!("sampled {:?}", sample.key);
+
             let sampled = sample.contained + sample.left + sample.right;
             if (sample.left + sample.right) == 0 || sampled < sample_threshold {
                 continue;
@@ -339,6 +372,8 @@ impl AutoSplitController {
 
             let qps = *pre_sum.last().unwrap(); // region_infos is not empty
             let num = self.cfg.detect_times;
+            // info!("load base split";"qps"=>self.cfg.qps_threshold);
+            info!("load base split";"qps"=>qps,"region_id"=>region_id);
             if qps > self.cfg.qps_threshold {
                 let recorder = self
                     .recorders
@@ -356,7 +391,7 @@ impl AutoSplitController {
 
                 recorder.record(key_ranges);
                 if recorder.is_ready() {
-                    let key = recorder.collect(&self.cfg);
+                    let key = recorder.collect(&self.cfg, region_id);
                     if !key.is_empty() {
                         let split_info = SplitInfo {
                             region_id,
@@ -459,6 +494,7 @@ mod tests {
         // unlimited scan
         sc.sample_key(b"", b"", Position::Contained);
         sc.sample_key(b"a", b"", Position::Contained);
+        sc.sample_key(b"b", b"d", Position::Contained);
         sc.sample_key(b"c", b"", Position::Right);
         sc.sample_key(b"d", b"", Position::Right);
         sc.sample_key(b"", b"a", Position::Left);
