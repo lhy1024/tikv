@@ -6,7 +6,7 @@ use std::slice::Iter;
 use std::time::{Duration, SystemTime};
 
 use kvproto::kvrpcpb::KeyRange;
-use kvproto::metapb::Peer;
+use kvproto::metapb::{Peer, RegionEpoch};
 
 use rand::Rng;
 
@@ -20,8 +20,9 @@ pub const TOP_N: usize = 10;
 
 pub struct SplitInfo {
     pub region_id: u64,
-    pub split_key: Vec<u8>,
+    pub split_key: Option<Vec<u8>>,
     pub peer: Peer,
+    pub epoch: RegionEpoch,
 }
 
 pub struct Sample {
@@ -94,6 +95,7 @@ pub struct RegionInfo {
     pub sample_num: usize,
     pub qps: usize,
     pub peer: Peer,
+    pub epoch: RegionEpoch,
     pub key_ranges: Vec<KeyRange>,
     pub approximate_size: u64,
     pub approximate_key: u64,
@@ -107,6 +109,7 @@ impl RegionInfo {
             qps: 0,
             key_ranges: Vec::with_capacity(sample_num),
             peer: Peer::default(),
+            epoch: RegionEpoch::default(),
             approximate_size: 0,
             approximate_key: 0,
             flow: FlowStatistics::default(),
@@ -140,11 +143,16 @@ impl RegionInfo {
             self.peer = peer.clone();
         }
     }
+
+    fn update_epoch(&mut self, epoch: &RegionEpoch) {
+        if self.epoch != *epoch {
+            self.epoch = epoch.clone();
+        }
+    }
 }
 
 pub struct Recorder {
     pub detect_num: u64,
-    pub peer: Peer,
     pub key_ranges: Vec<Vec<KeyRange>>,
     pub times: u64,
     pub create_time: SystemTime,
@@ -154,7 +162,6 @@ impl Recorder {
     fn new(detect_num: u64) -> Recorder {
         Recorder {
             detect_num,
-            peer: Peer::default(),
             key_ranges: vec![],
             times: 0,
             create_time: SystemTime::now(),
@@ -164,12 +171,6 @@ impl Recorder {
     fn record(&mut self, key_ranges: Vec<KeyRange>) {
         self.times += 1;
         self.key_ranges.push(key_ranges);
-    }
-
-    fn update_peer(&mut self, peer: &Peer) {
-        if self.peer != *peer {
-            self.peer = peer.clone();
-        }
     }
 
     fn is_ready(&self) -> bool {
@@ -262,17 +263,30 @@ pub struct ReadStats {
 }
 
 impl ReadStats {
-    pub fn add_qps(&mut self, region_id: u64, peer: &Peer, key_range: KeyRange) {
-        self.add_qps_batch(region_id, peer, vec![key_range]);
+    pub fn add_qps(
+        &mut self,
+        region_id: u64,
+        peer: &Peer,
+        epoch: &RegionEpoch,
+        key_range: KeyRange,
+    ) {
+        self.add_qps_batch(region_id, peer, epoch, vec![key_range]);
     }
 
-    pub fn add_qps_batch(&mut self, region_id: u64, peer: &Peer, key_ranges: Vec<KeyRange>) {
+    pub fn add_qps_batch(
+        &mut self,
+        region_id: u64,
+        peer: &Peer,
+        epoch: &RegionEpoch,
+        key_ranges: Vec<KeyRange>,
+    ) {
         let num = self.sample_num;
         let region_info = self
             .region_infos
             .entry(region_id)
             .or_insert_with(|| RegionInfo::new(num));
         region_info.update_peer(peer);
+        region_info.update_epoch(epoch);
         region_info.add_key_ranges(key_ranges);
     }
 
@@ -354,13 +368,14 @@ impl AutoSplitController {
 
             let approximate_keys = region_infos[0].approximate_key;
             let approximate_size = region_infos[0].approximate_size;
+            let peer = region_infos[0].peer.clone();
+            let epoch = region_infos[0].epoch.clone();
 
             let num = self.cfg.detect_times;
             let recorder = self
                 .recorders
                 .entry(region_id)
                 .or_insert_with(|| Recorder::new(num));
-            recorder.update_peer(&region_infos[0].peer);
 
             let key_ranges = sample(
                 self.cfg.sample_num,
@@ -371,27 +386,23 @@ impl AutoSplitController {
 
             recorder.record(key_ranges);
             if recorder.is_ready() {
-                if let Some(key) = recorder.collect(&self.cfg) {
-                    let split_info = SplitInfo {
-                        region_id,
-                        split_key: key.clone(),
-                        peer: recorder.peer.clone(),
-                    };
-                    split_infos.push(split_info);
-                    info!(
-                        "load base split region";
-                        "region_id"=>region_id,
-                        "size"=>approximate_size,
-                        "keys"=>approximate_keys,
-                        "qps"=>qps
-                    );
-                }
+                info!(
+                    "load base split region";
+                    "region_id"=>region_id,
+                    "size"=>approximate_size,
+                    "keys"=>approximate_keys,
+                    "qps"=>qps
+                );
+                split_infos.push(SplitInfo {
+                    region_id,
+                    peer,
+                    epoch,
+                    split_key: recorder.collect(&self.cfg),
+                });
                 self.recorders.remove(&region_id);
             }
-
             top.push(qps);
         }
-
         (top.into_vec(), split_infos)
     }
 
@@ -521,13 +532,20 @@ mod tests {
             let mut qps_stats = ReadStats::default();
             for _j in 0..100 {
                 for key_range in &key_ranges {
-                    qps_stats.add_qps(1, &Peer::default(), key_range.clone());
+                    qps_stats.add_qps(
+                        1,
+                        &Peer::default(),
+                        &RegionEpoch::default(),
+                        key_range.clone(),
+                    );
                 }
             }
             let (_, split_infos) = hub.flush(vec![qps_stats]);
             if (i + 1) % hub.cfg.detect_times == 0 {
                 assert_eq!(split_infos.len(), 1);
-                assert_eq!(split_infos[0].split_key.clone(), split_key);
+                if let Some(key) = &split_infos[0].split_key {
+                    assert_eq!(key.clone(), split_key);
+                }
             }
         }
     }
@@ -582,7 +600,12 @@ mod tests {
         let mut qps_stats = ReadStats::default();
         for i in 0..REGION_NUM {
             for _j in 0..KEY_RANGE_NUM {
-                qps_stats.add_qps(i, &Peer::default(), build_key_range(b"a", b"b", false))
+                qps_stats.add_qps(
+                    i,
+                    &Peer::default(),
+                    &RegionEpoch::default(),
+                    build_key_range(b"a", b"b", false),
+                )
             }
         }
         qps_stats
@@ -626,6 +649,7 @@ mod tests {
                 qps_stats.add_qps(
                     1,
                     &Peer::default(),
+                    &RegionEpoch::default(),
                     build_key_range(&start_key, &key, false),
                 );
             }
@@ -636,7 +660,12 @@ mod tests {
     fn qps_add(b: &mut test::Bencher) {
         let mut qps_stats = default_qps_stats();
         b.iter(|| {
-            qps_stats.add_qps(1, &Peer::default(), build_key_range(b"a", b"b", false));
+            qps_stats.add_qps(
+                1,
+                &Peer::default(),
+                &RegionEpoch::default(),
+                build_key_range(b"a", b"b", false),
+            );
         });
     }
 }

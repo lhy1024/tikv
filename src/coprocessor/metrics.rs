@@ -391,6 +391,7 @@ pub fn tls_collect_read_flow(region_id: u64, statistics: &Statistics) {
 pub fn tls_collect_qps(
     region_id: u64,
     peer: &metapb::Peer,
+    epoch: &metapb::RegionEpoch,
     start_key: &[u8],
     end_key: &[u8],
     reverse_scan: bool,
@@ -398,7 +399,8 @@ pub fn tls_collect_qps(
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
         let key_range = build_key_range(start_key, end_key, reverse_scan);
-        m.local_read_stats.add_qps(region_id, peer, key_range);
+        m.local_read_stats
+            .add_qps(region_id, peer, epoch, key_range);
     });
 }
 

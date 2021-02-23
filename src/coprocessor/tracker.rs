@@ -321,6 +321,7 @@ impl Tracker {
         tls_collect_perf_stats(self.req_ctx.tag, &self.total_perf_stats);
 
         let peer = self.req_ctx.context.get_peer();
+        let epoch = self.req_ctx.context.get_region_epoch();
         let region_id = self.req_ctx.context.get_region_id();
         let start_key = &self.req_ctx.lower_bound;
         let end_key = &self.req_ctx.upper_bound;
@@ -333,6 +334,7 @@ impl Tracker {
         tls_collect_qps(
             region_id,
             peer,
+            epoch,
             Key::from_raw(start_key).as_encoded(),
             Key::from_raw(end_key).as_encoded(),
             reverse_scan,
