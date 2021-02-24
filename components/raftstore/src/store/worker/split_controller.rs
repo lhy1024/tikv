@@ -196,12 +196,21 @@ impl Recorder {
                 Recorder::sample(&mut samples, &key_range);
             }
         }
-        Recorder::split_key(
-            samples,
+        let split_key = Recorder::split_key(
+            &samples,
             config.split_balance_score,
             config.split_contained_score,
             config.sample_threshold,
-        )
+        );
+        match split_key {
+            Some(_) => split_key,
+            None => Recorder::split_key(
+                &samples,
+                config.split_balance_score,
+                2.0, // skip contained
+                config.sample_threshold,
+            ),
+        }
     }
 
     fn sample(samples: &mut Vec<Sample>, key_range: &KeyRange) {
@@ -229,7 +238,7 @@ impl Recorder {
     }
 
     fn split_key(
-        samples: Vec<Sample>,
+        samples: &Vec<Sample>,
         split_balance_score: f64,
         split_contained_score: f64,
         sample_threshold: i32,
@@ -257,6 +266,9 @@ impl Recorder {
             }
         }
         if best_index >= 0 {
+            if split_contained_score > 1.0 {
+                info!("skip container score threshold when load base split");
+            }
             return Some(samples[best_index as usize].key.clone());
         }
         None
