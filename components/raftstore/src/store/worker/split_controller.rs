@@ -25,7 +25,7 @@ pub struct SplitInfo {
     pub peer: Peer,
     pub epoch: RegionEpoch,
 }
-
+#[derive(Debug)]
 pub struct Sample {
     pub key: Vec<u8>,
     pub left: i32,
@@ -196,21 +196,12 @@ impl Recorder {
                 Recorder::sample(&mut samples, &key_range);
             }
         }
-        let split_key = Recorder::split_key(
+        Recorder::split_key(
             &samples,
             config.split_balance_score,
             config.split_contained_score,
             config.sample_threshold,
-        );
-        match split_key {
-            Some(_) => split_key,
-            None => Recorder::split_key(
-                &samples,
-                config.split_balance_score,
-                2.0, // skip contained
-                config.sample_threshold,
-            ),
-        }
+        )
     }
 
     fn sample(samples: &mut Vec<Sample>, key_range: &KeyRange) {
@@ -239,36 +230,36 @@ impl Recorder {
 
     fn split_key(
         samples: &Vec<Sample>,
-        split_balance_score: f64,
-        split_contained_score: f64,
+        split_balance_score_threshold: f64,
+        _split_contained_score: f64,
         sample_threshold: i32,
     ) -> Option<Vec<u8>> {
         let mut best_index: i32 = -1;
         let mut best_score = 2.0;
         for (index, sample) in samples.iter().enumerate() {
             let sampled = sample.contained + sample.left + sample.right;
-            if (sample.left + sample.right) == 0 || sampled < sample_threshold {
+            if sampled < sample_threshold {
                 continue;
             }
-            let diff = (sample.left - sample.right) as f64;
-            let balance_score = diff.abs() / (sample.left + sample.right) as f64;
-            if balance_score >= split_balance_score {
+            let balance_score = (sample.left - sample.right).abs() as f64 / sampled as f64;
+            println!(
+                "balance score, key: {}, sample: {:?}, score: {}",
+                String::from_utf8(sample.key.clone()).unwrap(),
+                sample,
+                balance_score
+            );
+            if balance_score >= split_balance_score_threshold {
                 continue;
             }
-            let contained_score = sample.contained as f64 / sampled as f64;
-            if contained_score >= split_contained_score {
-                continue;
-            }
-            let final_score = balance_score + contained_score;
-            if final_score < best_score {
+            if best_score > balance_score
+                || (best_score == balance_score
+                    && sample.key.cmp(&samples[best_index as usize].key) == Ordering::Less)
+            {
                 best_index = index as i32;
-                best_score = final_score;
+                best_score = balance_score;
             }
         }
         if best_index >= 0 {
-            if split_contained_score > 1.0 {
-                info!("skip container score threshold when load base split");
-            }
             return Some(samples[best_index as usize].key.clone());
         }
         None
@@ -519,28 +510,105 @@ mod tests {
     }
 
     #[test]
-    fn test_hub() {
-        check_split(
-            vec![
-                build_key_range(b"a", b"b", false),
-                build_key_range(b"b", b"c", false),
-            ],
-            b"b",
-        );
+    fn test_split() {
+        // check_split_key(
+        //     vec![
+        //         build_key_range(b"a", b"b", false),
+        //         build_key_range(b"b", b"c", false),
+        //     ],
+        //     b"b",
+        //     "average split by raw key",
+        // );
 
-        let key_a = Key::from_raw(b"0080").append_ts(2.into());
-        let key_b = Key::from_raw(b"0160").append_ts(2.into());
-        let key_c = Key::from_raw(b"0240").append_ts(2.into());
-        check_split(
-            vec![
-                build_key_range(key_a.as_encoded(), key_b.as_encoded(), false),
-                build_key_range(key_b.as_encoded(), key_c.as_encoded(), false),
-            ],
-            key_b.as_encoded(),
-        );
+        // let key_a = Key::from_raw(b"0080").append_ts(2.into());
+        // let key_b = Key::from_raw(b"0160").append_ts(2.into());
+        // let key_c = Key::from_raw(b"0240").append_ts(2.into());
+        // check_split_key(
+        //     vec![
+        //         build_key_range(key_a.as_encoded(), key_b.as_encoded(), false),
+        //         build_key_range(key_b.as_encoded(), key_c.as_encoded(), false),
+        //     ],
+        //     key_b.as_encoded(),
+        //     "average split by encoded key",
+        // );
+
+        for _i in 0..100 {// test unstable
+            check_split_key(
+                vec![
+                    build_key_range(b"a", b"k", false),
+                    build_key_range(b"b", b"j", false),
+                    build_key_range(b"c", b"i", false),
+                    build_key_range(b"d", b"h", false),
+                    build_key_range(b"e", b"g", false),
+                    build_key_range(b"f", b"f", false),
+                ],
+                b"f",
+                "isosceles triangle",
+            );
+
+            check_split_key(
+                vec![
+                    build_key_range(b"a", b"f", false),
+                    build_key_range(b"b", b"g", false),
+                    build_key_range(b"c", b"h", false),
+                    build_key_range(b"d", b"i", false),
+                    build_key_range(b"e", b"j", false),
+                    build_key_range(b"f", b"k", false),
+                ],
+                b"f",
+                "parallelogram",
+            );
+
+            // check_split_key(
+            //     vec![
+            //         build_key_range(b"a", b"l", false),
+            //         build_key_range(b"a", b"m", false),
+            //     ],
+            //     b"l",
+            //     "right-angle trapezoid 1",
+            // );
+
+            // check_split_key(
+            //     vec![
+            //         build_key_range(b"a", b"l", false),
+            //         build_key_range(b"b", b"l", false),
+            //     ],
+            //     b"b",
+            //     "right-angle trapezoid 2",
+            // );
+
+            // check_split_key(
+            //     vec![
+            //         build_key_range(b"a", b"a", false),
+            //         build_key_range(b"a", b"b", false),
+            //         build_key_range(b"a", b"c", false),
+            //         build_key_range(b"a", b"d", false),
+            //         build_key_range(b"a", b"e", false),
+            //         build_key_range(b"a", b"f", false),
+            //         build_key_range(b"a", b"g", false),
+            //         build_key_range(b"a", b"h", false),
+            //         build_key_range(b"a", b"i", false),
+            //     ], // todo no suitable key in less lines
+            //     b"b",
+            //     "right-angle triangle 1",
+            // );
+
+            // check_split_key(
+            //     vec![
+            //         build_key_range(b"a", b"f", false),
+            //         build_key_range(b"b", b"f", false),
+            //         build_key_range(b"c", b"f", false),
+            //         build_key_range(b"d", b"f", false),
+            //         build_key_range(b"e", b"f", false),
+            //         build_key_range(b"f", b"f", false),
+            //     ],
+            //     b"e",
+            //     "right-angle triangle 2",
+            // );
+        }
     }
 
-    fn check_split(key_ranges: Vec<KeyRange>, split_key: &[u8]) {
+    fn check_split_key(key_ranges: Vec<KeyRange>, split_key: &[u8], case_name: &str) {
         let mut hub = AutoSplitController::new(SplitConfigManager::default());
         hub.cfg.qps_threshold = 1;
         hub.cfg.sample_threshold = 0;
@@ -562,8 +630,21 @@ mod tests {
             let (_, split_infos) = hub.flush(vec![qps_stats]);
             if (i + 1) % hub.cfg.detect_times == 0 {
                 assert_eq!(split_infos.len(), 1);
+                assert!(
+                    !split_infos[0].split_key.is_none(),
+                    "case {:?}, expect key is {:?}, but no obtained key",
+                    case_name,
+                    String::from_utf8(Vec::from(split_key)).unwrap()
+                );
                 if let Some(key) = &split_infos[0].split_key {
-                    assert_eq!(key.clone(), split_key);
+                    assert_eq!(
+                        key.clone(),
+                        split_key,
+                        "case {:?}, obtained key is {:?}, expect key is {:?}",
+                        case_name,
+                        String::from_utf8(Vec::from(key.clone())).unwrap(),
+                        String::from_utf8(Vec::from(split_key)).unwrap()
+                    );
                 }
             }
         }
