@@ -229,7 +229,7 @@ impl Recorder {
     }
 
     fn split_key(
-        samples: &Vec<Sample>,
+        samples: &[Sample],
         split_balance_score_threshold: f64,
         _split_contained_score: f64,
         sample_threshold: i32,
@@ -241,20 +241,23 @@ impl Recorder {
             if sampled < sample_threshold {
                 continue;
             }
-            let balance_score = (sample.left - sample.right).abs() as f64 / sampled as f64;
-            println!(
-                "balance score, key: {}, sample: {:?}, score: {}",
-                String::from_utf8(sample.key.clone()).unwrap(),
-                sample,
-                balance_score
-            );
+
+            let balance_score = if sample.left + sample.right == 0 {
+                0.0
+            } else {
+                (sample.left - sample.right).abs() as f64 / (sample.left + sample.right) as f64
+            };
+
             if balance_score >= split_balance_score_threshold {
                 continue;
             }
+
             let contained_score = 1.0 - sample.contained as f64 / sampled as f64;
+
             let final_score = balance_score + contained_score;
+
             if best_score > final_score
-                || (best_score == final_score
+                || ((best_score - final_score).abs() < f64::EPSILON
                     && sample.key.cmp(&samples[best_index as usize].key) == Ordering::Less)
             {
                 best_index = index as i32;
@@ -645,7 +648,7 @@ mod tests {
                         split_key,
                         "case {:?}, obtained key is {:?}, expect key is {:?}",
                         case_name,
-                        String::from_utf8(Vec::from(key.clone())).unwrap(),
+                        String::from_utf8(key.clone()).unwrap(),
                         String::from_utf8(Vec::from(split_key)).unwrap()
                     );
                 }
