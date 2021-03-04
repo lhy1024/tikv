@@ -1,7 +1,6 @@
 // Copyright 2020 TiKV Project Authors. Licensed under Apache-2.0.
 
 use std::cmp::Ordering;
-use std::collections::BinaryHeap;
 use std::slice::Iter;
 use std::time::{Duration, SystemTime};
 
@@ -15,10 +14,9 @@ use tikv_util::config::Tracker;
 
 use txn_types::Key;
 
+use crate::store::metrics::*;
 use crate::store::worker::split_config::DEFAULT_SAMPLE_NUM;
 use crate::store::worker::{FlowStatistics, SplitConfig, SplitConfigManager};
-
-pub const TOP_N: usize = 10;
 
 pub struct SplitInfo {
     pub region_id: u64,
@@ -331,11 +329,6 @@ impl AutoSplitController {
         let capacity = read_stats_vec.len();
         for read_stats in read_stats_vec {
             for (region_id, region_info) in read_stats.region_infos {
-                if region_info.approximate_size < self.cfg.size_threshold
-                    && region_info.approximate_key < self.cfg.key_threshold
-                {
-                    continue;
-                }
                 let region_infos = region_infos_map
                     .entry(region_id)
                     .or_insert_with(|| Vec::with_capacity(capacity));
@@ -345,9 +338,8 @@ impl AutoSplitController {
         region_infos_map
     }
 
-    pub fn flush(&mut self, read_stats_vec: Vec<ReadStats>) -> (Vec<usize>, Vec<SplitInfo>) {
+    pub fn flush(&mut self, read_stats_vec: Vec<ReadStats>) -> Vec<SplitInfo> {
         let mut split_infos = Vec::default();
-        let mut top = BinaryHeap::with_capacity(TOP_N as usize);
         let region_infos_map = self.collect_read_stats(read_stats_vec);
 
         for (region_id, region_infos) in region_infos_map {
@@ -355,6 +347,18 @@ impl AutoSplitController {
             let qps = *pre_sum.last().unwrap(); // region_infos is not empty
             if qps < self.cfg.qps_threshold {
                 self.recorders.remove_entry(&region_id);
+                continue;
+            }
+            LOAD_BASE_SPLIT_EVENT.with_label_values(&["qps_fit"]).inc();
+            READ_QPS_TOPN
+                .with_label_values(&[&region_id.to_string()])
+                .set(qps as f64);
+            if region_infos[0].approximate_size < self.cfg.size_threshold
+                && region_infos[0].approximate_key < self.cfg.key_threshold
+            {
+                LOAD_BASE_SPLIT_EVENT
+                    .with_label_values(&["size_too_small"])
+                    .inc();
                 continue;
             }
 
@@ -385,6 +389,9 @@ impl AutoSplitController {
                         peer: recorder.peer.clone(),
                     };
                     split_infos.push(split_info);
+                    LOAD_BASE_SPLIT_EVENT
+                        .with_label_values(&["prepare_to_split"])
+                        .inc();
                     info!(
                         "load base split region";
                         "region_id"=>region_id,
@@ -392,14 +399,16 @@ impl AutoSplitController {
                         "keys"=>approximate_keys,
                         "qps"=>qps
                     );
+                } else {
+                    LOAD_BASE_SPLIT_EVENT
+                        .with_label_values(&["no_fit_key"])
+                        .inc();
                 }
                 self.recorders.remove(&region_id);
             }
-
-            top.push(qps);
         }
 
-        (top.into_vec(), split_infos)
+        split_infos
     }
 
     pub fn clear(&mut self) {
@@ -508,7 +517,7 @@ mod tests {
                 qps_stats.add_qps(1, &Peer::default(), build_key_range(b"a", b"b", false));
                 qps_stats.add_qps(1, &Peer::default(), build_key_range(b"b", b"c", false));
             }
-            let (_, split_infos) = hub.flush(vec![qps_stats]);
+            let split_infos = hub.flush(vec![qps_stats]);
             if (i + 1) % hub.cfg.detect_times == 0 {
                 assert_eq!(split_infos.len(), 1);
                 assert_eq!(
