@@ -353,17 +353,17 @@ impl AutoSplitController {
             READ_QPS_TOPN
                 .with_label_values(&[&region_id.to_string()])
                 .set(qps as f64);
-            if region_infos[0].approximate_size < self.cfg.size_threshold
-                && region_infos[0].approximate_key < self.cfg.key_threshold
-            {
-                LOAD_BASE_SPLIT_EVENT
-                    .with_label_values(&["size_too_small"])
-                    .inc();
-                continue;
-            }
 
             let approximate_keys = region_infos[0].approximate_key;
             let approximate_size = region_infos[0].approximate_size;
+            if approximate_size < self.cfg.size_threshold
+                && approximate_keys < self.cfg.key_threshold
+            {
+                LOAD_BASE_SPLIT_EVENT
+                    .with_label_values(&["size_or_keys_too_small"])
+                    .inc();
+                continue;
+            }
 
             let num = self.cfg.detect_times;
             let recorder = self
@@ -501,6 +501,14 @@ mod tests {
         sc.sample_key(b"", b"a", Position::Left);
         sc.sample_key(b"", b"c", Position::Left);
         sc.sample_key(b"", b"d", Position::Contained);
+    }
+
+    #[test]
+    fn test_size_threshold(){
+        let mut hub = AutoSplitController::new(SplitConfigManager::default());
+        hub.cfg.qps_threshold = 1;
+        hub.cfg.sample_threshold = 0;
+        
     }
 
     #[test]
