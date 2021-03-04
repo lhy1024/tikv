@@ -26,9 +26,8 @@ use prometheus::local::LocalHistogram;
 use raft::eraftpb::ConfChangeType;
 
 use crate::store::cmd_resp::new_error;
-use crate::store::metrics::*;
 use crate::store::util::{is_epoch_stale, ConfChangeKind, KeysInfoFormatter};
-use crate::store::worker::split_controller::{SplitInfo, TOP_N};
+use crate::store::worker::split_controller::SplitInfo;
 use crate::store::worker::{AutoSplitController, ReadStats};
 use crate::store::Callback;
 use crate::store::StoreInfo;
@@ -380,7 +379,7 @@ where
                         while let Ok(other) = receiver.try_recv() {
                             others.push(other);
                         }
-                        let (top, split_infos) = auto_split_controller.flush(others);
+                        let split_infos= auto_split_controller.flush(others);
                         auto_split_controller.clear();
                         let task = Task::AutoSplit { split_infos };
                         if let Err(e) = scheduler.schedule(task) {
@@ -388,16 +387,6 @@ where
                                 "failed to send split infos to pd worker";
                                 "err" => ?e,
                             );
-                        }
-
-                        for i in 0..TOP_N {
-                            if i < top.len() {
-                                READ_QPS_TOPN
-                                    .with_label_values(&[&i.to_string()])
-                                    .set(top[i] as f64);
-                            } else {
-                                READ_QPS_TOPN.with_label_values(&[&i.to_string()]).set(0.0);
-                            }
                         }
                     }
                     // modules timer_cnt with the least common multiple of intervals to avoid overflow
