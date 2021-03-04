@@ -388,7 +388,7 @@ impl AutoSplitController {
             let pre_sum = prefix_sum(region_infos.iter(), RegionInfo::get_qps);
             let qps = *pre_sum.last().unwrap(); // region_infos is not empty
             if qps < self.cfg.qps_threshold {
-                self.recorders.remove_entry(&region_id);
+                self.recorders.remove(&region_id);
                 continue;
             }
             LOAD_BASE_SPLIT_EVENT.with_label_values(&["qps_fit"]).inc();
@@ -445,6 +445,9 @@ impl AutoSplitController {
                     split_key,
                 });
                 self.recorders.remove(&region_id);
+                READ_QPS_TOPN
+                    .with_label_values(&[&region_id.to_string()])
+                    .set(0.0);
                 LOAD_BASE_SPLIT_EVENT
                     .with_label_values(&["prepare_to_split"])
                     .inc();
