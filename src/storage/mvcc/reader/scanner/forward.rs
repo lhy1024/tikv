@@ -181,6 +181,7 @@ impl<S: Snapshot, P: ScanPolicy<S>> ForwardScanner<S, P> {
 
         // TODO: We don't need to seek lock CF if isolation level is RC.
 
+        // 返回前进行采样
         loop {
             // `current_user_key` is `min(user_key(write_cursor), lock_cursor)`, indicating
             // the encoded user key we are currently dealing with. It may not have a write, or

@@ -129,6 +129,7 @@ impl RegionInfo {
     }
 
     fn add_key_ranges(&mut self, key_ranges: Vec<KeyRange>) {
+        // 拆分到 util 变成可被 coprocessor 调用的
         self.qps += key_ranges.len();
         for key_range in key_ranges {
             if self.key_ranges.len() < self.sample_num {
@@ -189,6 +190,7 @@ impl Recorder {
             .fold(HashSet::new(), |mut set, key_range| {
                 set.insert(&key_range.start_key);
                 set.insert(&key_range.end_key);
+                // add coprocessor key
                 set
             })
             .into_iter()

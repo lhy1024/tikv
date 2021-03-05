@@ -57,6 +57,12 @@ impl SplitConfig {
             );
         }
 
+        if self.sample_num >= self.qps_threshold {
+            return Err(
+                ("sample_num should be less than qps_threshold for load-base-split.").into(),
+            );
+        }
+
         Ok(())
     }
 }
