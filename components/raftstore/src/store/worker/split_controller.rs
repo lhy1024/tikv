@@ -171,7 +171,11 @@ impl Recorder {
             .fold(HashSet::new(), |mut set, key_range| {
                 set.insert(&key_range.start_key);
                 set.insert(&key_range.end_key);
-                // add coprocessor key
+                if let Some(scan_sample_keys) = &key_range.scan_sample_keys {
+                    for key in scan_sample_keys {
+                        set.insert(key.as_encoded());
+                    }
+                };
                 set
             })
             .into_iter()
@@ -264,21 +268,11 @@ pub struct ReadStats {
 }
 
 impl ReadStats {
-    pub fn add_qps(
-        &mut self,
-        region_id: u64,
-        peer: &Peer,
-        key_range: KeyRange,
-    ) {
+    pub fn add_qps(&mut self, region_id: u64, peer: &Peer, key_range: KeyRange) {
         self.add_qps_batch(region_id, peer, vec![key_range]);
     }
 
-    pub fn add_qps_batch(
-        &mut self,
-        region_id: u64,
-        peer: &Peer,
-        key_ranges: Vec<KeyRange>,
-    ) {
+    pub fn add_qps_batch(&mut self, region_id: u64, peer: &Peer, key_ranges: Vec<KeyRange>) {
         let num = self.sample_num;
         let region_info = self
             .region_infos
@@ -535,11 +529,7 @@ mod tests {
     fn gen_read_stats(region_id: u64, key_ranges: Vec<KeyRange>) -> ReadStats {
         let mut qps_stats = ReadStats::default();
         for key_range in &key_ranges {
-            qps_stats.add_qps(
-                region_id,
-                &Peer::default(),
-                key_range.clone(),
-            );
+            qps_stats.add_qps(region_id, &Peer::default(), key_range.clone());
         }
         for (_, region_info) in qps_stats.region_infos.iter_mut() {
             region_info.approximate_key = SplitConfig::default().key_threshold;
@@ -662,20 +652,12 @@ mod tests {
             let mut qps_stats_vec = vec![];
 
             let mut qps_stats = ReadStats::default();
-            qps_stats.add_qps(
-                1,
-                &Peer::default(),
-                build_key_range(b"a", b"b", false),
-            );
+            qps_stats.add_qps(1, &Peer::default(), build_key_range(b"a", b"b", false));
             qps_stats_vec.push(qps_stats);
 
             let mut qps_stats = ReadStats::default();
             for _ in 0..2000 {
-                qps_stats.add_qps(
-                    1,
-                    &Peer::default(),
-                    build_key_range(b"b", b"c", false),
-                );
+                qps_stats.add_qps(1, &Peer::default(), build_key_range(b"b", b"c", false));
             }
             qps_stats_vec.push(qps_stats);
             hub.flush(qps_stats_vec);
@@ -795,11 +777,7 @@ mod tests {
         let mut qps_stats = ReadStats::default();
         for i in 0..REGION_NUM {
             for _j in 0..KEY_RANGE_NUM {
-                qps_stats.add_qps(
-                    i,
-                    &Peer::default(),
-                    build_key_range(b"a", b"b", false),
-                )
+                qps_stats.add_qps(i, &Peer::default(), build_key_range(b"a", b"b", false))
             }
         }
         qps_stats
@@ -853,11 +831,7 @@ mod tests {
     fn qps_add(b: &mut test::Bencher) {
         let mut qps_stats = default_qps_stats();
         b.iter(|| {
-            qps_stats.add_qps(
-                1,
-                &Peer::default(),
-                build_key_range(b"a", b"b", false),
-            );
+            qps_stats.add_qps(1, &Peer::default(), build_key_range(b"a", b"b", false));
         });
     }
 }

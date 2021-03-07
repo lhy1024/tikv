@@ -393,23 +393,28 @@ pub fn tls_collect_read_flow(region_id: u64, statistics: &Statistics) {
     });
 }
 
-pub fn tls_collect_qps(
-    region_id: u64,
-    peer: &metapb::Peer,
-    key_range: KeyRange,
-) {
+pub fn tls_collect_qps(region_id: u64, peer: &metapb::Peer, key_range: KeyRange) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        m.local_read_stats
-            .add_qps(region_id, peer,  key_range);
+        m.local_read_stats.add_qps(region_id, peer, key_range);
     });
 }
 
-pub fn tls_sample_key(key: &Key) {
+pub fn tls_collect_sample_key(key: &Key) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
         m.local_sample_keys.append(key);
     });
+}
+
+pub fn tls_move_sample_key() -> Vec<Key> {
+    let mut sample_keys = vec![];
+    TLS_COP_METRICS.with(|m| {
+        let mut m = m.borrow_mut();
+        mem::swap(&mut sample_keys, &mut m.local_sample_keys.results);
+        m.local_sample_keys.clear();
+    });
+    sample_keys
 }
 
 pub fn tls_collect_perf_stats(cmd: ReqTag, perf_stats: &PerfStatisticsDelta) {

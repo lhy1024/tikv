@@ -19,6 +19,7 @@ use raft::INVALID_INDEX;
 use raft_proto::ConfChangeI;
 use tikv_util::time::monotonic_raw_now;
 use tikv_util::Either;
+use txn_types::Key;
 
 use super::peer_storage;
 use crate::{Error, Result};
@@ -345,16 +346,26 @@ pub fn check_peer_id(req: &RaftCmdRequest, peer_id: u64) -> Result<()> {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct KeyRange {
     pub start_key: Vec<u8>,
     pub end_key: Vec<u8>,
     pub processed_keys_num: Option<usize>,
     pub processed_size: Option<u64>,
-    pub scan_sample_keys: Option<Vec<Vec<u8>>>,
+    pub scan_sample_keys: Option<Vec<Key>>,
 }
 
 impl KeyRange {
+    pub fn default() -> KeyRange {
+        KeyRange {
+            start_key: vec![],
+            end_key: vec![],
+            processed_keys_num: None,
+            processed_size: None,
+            scan_sample_keys: None,
+        }
+    }
+
     pub fn set_start_key(&mut self, start_key: Vec<u8>) {
         self.start_key = start_key;
     }
@@ -371,7 +382,7 @@ impl KeyRange {
         self.processed_size = Some(processed_size);
     }
 
-    pub fn set_scan_sample_keys(&mut self, scan_sample_keys: Vec<Vec<u8>>) {
+    pub fn set_scan_sample_keys(&mut self, scan_sample_keys: Vec<Key>) {
         self.scan_sample_keys = Some(scan_sample_keys);
     }
 }
@@ -396,7 +407,10 @@ pub struct ReservoirSampling<T> {
     pub results: Vec<T>,
 }
 impl<T: std::clone::Clone> ReservoirSampling<T> {
-    pub fn new(capacity: usize) -> ReservoirSampling<T> { // 如何保证 capacity != 0 
+    pub fn new(capacity: usize) -> ReservoirSampling<T> {
+        if capacity == 0 {
+            error!("Reservoir Sampling should be with capacity > 0");
+        }
         ReservoirSampling {
             total: 0,
             capacity,
