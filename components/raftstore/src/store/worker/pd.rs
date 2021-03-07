@@ -379,7 +379,7 @@ where
                         while let Ok(other) = receiver.try_recv() {
                             others.push(other);
                         }
-                        let split_infos= auto_split_controller.flush(others);
+                        let split_infos = auto_split_controller.flush(others);
                         auto_split_controller.clear();
                         let task = Task::AutoSplit { split_infos };
                         if let Err(e) = scheduler.schedule(task) {
@@ -1076,7 +1076,7 @@ where
                                 )
                             } else {
                                 let msg = CasualMessage::HalfSplitRegion {
-                                    region_epoch: split_info.epoch,
+                                    region_epoch: region.get_region_epoch().clone(),
                                     policy: pdpb::CheckPolicy::Scan,
                                     source: "load_base_split",
                                 };

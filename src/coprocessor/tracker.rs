@@ -322,7 +322,6 @@ impl Tracker {
         tls_collect_perf_stats(self.req_ctx.tag, &self.total_perf_stats);
 
         let peer = self.req_ctx.context.get_peer();
-        let epoch = self.req_ctx.context.get_region_epoch();
         let region_id = self.req_ctx.context.get_region_id();
         let start_key = &self.req_ctx.lower_bound;
         let end_key = &self.req_ctx.upper_bound;
@@ -342,7 +341,7 @@ impl Tracker {
         // let mut read_stats = ReadStats::default();
         // mem::swap(&mut read_stats, &mut m.local_read_stats);
         // reporter.report_read_stats(read_stats);
-        tls_collect_qps(region_id, peer, epoch, key_range);
+        tls_collect_qps(region_id, peer,  key_range);
         self.current_stage = TrackerState::Tracked;
     }
 }

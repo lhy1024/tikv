@@ -272,7 +272,6 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                 tls_collect_qps(
                     ctx.get_region_id(),
                     ctx.get_peer(),
-                    ctx.get_region_epoch(),
                     key.as_encoded(),
                     key.as_encoded(),
                     false,
@@ -358,8 +357,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     for get in &requests {
                         let region_id = get.get_context().get_region_id();
                         let peer = get.get_context().get_peer();
-                        let epoch = get.get_context().get_region_epoch();
-                        tls_collect_qps(region_id, peer, epoch, &get.key, &get.key, false);
+                        tls_collect_qps(region_id, peer,  &get.key, &get.key, false);
                     }
                     KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                     KV_COMMAND_KEYREAD_HISTOGRAM_STATIC
@@ -492,7 +490,6 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                 tls_collect_qps_batch(
                     ctx.get_region_id(),
                     ctx.get_peer(),
-                    ctx.get_region_epoch(),
                     key_ranges,
                 );
 
@@ -595,7 +592,6 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                 tls_collect_qps(
                     ctx.get_region_id(),
                     ctx.get_peer(),
-                    ctx.get_region_epoch(),
                     start_key.as_encoded(),
                     key,
                     reverse_scan,
@@ -724,7 +720,6 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     tls_collect_qps(
                         ctx.get_region_id(),
                         ctx.get_peer(),
-                        ctx.get_region_epoch(),
                         start_key.as_encoded(),
                         key,
                         false,
@@ -926,7 +921,6 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                 tls_collect_qps(
                     ctx.get_region_id(),
                     ctx.get_peer(),
-                    ctx.get_region_epoch(),
                     &key,
                     &key,
                     false,
@@ -984,8 +978,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     let key = get.key.to_owned();
                     let region_id = get.get_context().get_region_id();
                     let peer = get.get_context().get_peer();
-                    let epoch = get.get_context().get_region_epoch();
-                    tls_collect_qps(region_id, peer, epoch, &key, &key, false);
+                    tls_collect_qps(region_id, peer,  &key, &key, false);
                 }
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                 SCHED_COMMANDS_PRI_COUNTER_VEC_STATIC
@@ -1062,7 +1055,6 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                 tls_collect_qps_batch(
                     ctx.get_region_id(),
                     ctx.get_peer(),
-                    ctx.get_region_epoch(),
                     key_ranges,
                 );
 
@@ -1390,7 +1382,6 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     tls_collect_qps(
                         ctx.get_region_id(),
                         ctx.get_peer(),
-                        ctx.get_region_epoch(),
                         &start_key,
                         &end_key,
                         reverse_scan,
@@ -1585,7 +1576,6 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     tls_collect_qps_batch(
                         ctx.get_region_id(),
                         ctx.get_peer(),
-                        ctx.get_region_epoch(),
                         key_ranges,
                     );
                     metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);

@@ -396,13 +396,12 @@ pub fn tls_collect_read_flow(region_id: u64, statistics: &Statistics) {
 pub fn tls_collect_qps(
     region_id: u64,
     peer: &metapb::Peer,
-    epoch: &metapb::RegionEpoch,
     key_range: KeyRange,
 ) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
         m.local_read_stats
-            .add_qps(region_id, peer, epoch, key_range);
+            .add_qps(region_id, peer,  key_range);
     });
 }
 
