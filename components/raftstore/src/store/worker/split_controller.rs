@@ -1,6 +1,6 @@
 // Copyright 2020 TiKV Project Authors. Licensed under Apache-2.0.
 
-use std::cmp::Ordering;
+use std::cmp::{max, Ordering};
 use std::collections::HashSet;
 
 use std::slice::Iter;
@@ -103,6 +103,7 @@ pub struct RegionInfo {
     pub approximate_key: u64,
     pub flow: FlowStatistics,
     pub reservoir_sampling: ReservoirSampling<KeyRange>,
+    pub max_scan_keys: usize,
 }
 
 impl RegionInfo {
@@ -113,6 +114,7 @@ impl RegionInfo {
             approximate_key: 0,
             flow: FlowStatistics::default(),
             reservoir_sampling: ReservoirSampling::new(sample_num),
+            max_scan_keys: 0,
         }
     }
 
@@ -127,6 +129,9 @@ impl RegionInfo {
     fn add_key_ranges(&mut self, key_ranges: Vec<KeyRange>) {
         for key_range in &key_ranges {
             self.reservoir_sampling.append(key_range);
+            if let Some(scan_keys) = key_range.processed_keys_num {
+                self.max_scan_keys = max(self.max_scan_keys, scan_keys);
+            }
         }
     }
 
@@ -134,6 +139,34 @@ impl RegionInfo {
         if self.peer != *peer {
             self.peer = peer.clone();
         }
+    }
+}
+
+pub struct RegionInfos {
+    pub infos: Vec<RegionInfo>,
+    pub max_scan_keys: usize,
+    pub approximate_keys: u64,
+    pub approximate_size: u64,
+}
+
+impl RegionInfos {
+    pub fn new() -> RegionInfos {
+        RegionInfos {
+            infos: vec![],
+            max_scan_keys: 0,
+            approximate_keys: 0,
+            approximate_size: 0,
+        }
+    }
+    pub fn push(&mut self, info: RegionInfo) {
+        self.max_scan_keys = max(self.max_scan_keys, info.max_scan_keys);
+        self.approximate_size = max(self.approximate_size, info.approximate_size);
+        self.approximate_keys = max(self.approximate_keys, info.approximate_key);
+        self.infos.push(info);
+    }
+
+    pub fn get_peer(&self) -> Peer {
+        self.infos[0].peer.clone()
     }
 }
 
@@ -339,15 +372,14 @@ impl AutoSplitController {
         AutoSplitController::new(SplitConfigManager::default())
     }
 
-    fn collect_read_stats(&self, read_stats_vec: Vec<ReadStats>) -> HashMap<u64, Vec<RegionInfo>> {
+    fn collect_read_stats(&self, read_stats_vec: Vec<ReadStats>) -> HashMap<u64, RegionInfos> {
         // collect from different thread
         let mut region_infos_map = HashMap::default(); // regionID-regionInfos
-        let capacity = read_stats_vec.len();
         for read_stats in read_stats_vec {
             for (region_id, region_info) in read_stats.region_infos {
                 let region_infos = region_infos_map
                     .entry(region_id)
-                    .or_insert_with(|| Vec::with_capacity(capacity));
+                    .or_insert_with(RegionInfos::new);
                 region_infos.push(region_info);
             }
         }
@@ -359,7 +391,7 @@ impl AutoSplitController {
         let region_infos_map = self.collect_read_stats(read_stats_vec);
 
         for (region_id, region_infos) in region_infos_map {
-            let pre_sum = prefix_sum(region_infos.iter(), RegionInfo::get_qps);
+            let pre_sum = prefix_sum(region_infos.infos.iter(), RegionInfo::get_qps);
             let qps = *pre_sum.last().unwrap(); // region_infos is not empty
             if qps < self.cfg.qps_threshold {
                 if self.recorders.contains_key(&region_id) {
@@ -375,9 +407,14 @@ impl AutoSplitController {
                 .with_label_values(&[&region_id.to_string()])
                 .set(qps as f64);
 
-            let approximate_keys = region_infos[0].approximate_key;
-            let approximate_size = region_infos[0].approximate_size;
-            if approximate_size < self.cfg.size_threshold
+            let approximate_keys = region_infos.approximate_keys;
+            let approximate_size = region_infos.approximate_size;
+            let max_scan_keys = region_infos.max_scan_keys;
+            if max_scan_keys > (region_infos.approximate_keys / 10) as usize {
+                LOAD_BASE_SPLIT_EVENT
+                    .with_label_values(&["hit_copr_keys"])
+                    .inc();
+            } else if approximate_size < self.cfg.size_threshold
                 && approximate_keys < self.cfg.key_threshold
             {
                 LOAD_BASE_SPLIT_EVENT
@@ -386,7 +423,7 @@ impl AutoSplitController {
                 continue;
             }
 
-            let peer = region_infos[0].peer.clone();
+            let peer = region_infos.get_peer(); //todo peer 的隐患
 
             let num = self.cfg.detect_times;
             let recorder = self
@@ -397,7 +434,7 @@ impl AutoSplitController {
             let key_ranges = sample(
                 self.cfg.sample_num,
                 &pre_sum,
-                region_infos,
+                region_infos.infos,
                 RegionInfo::get_key_ranges_mut,
             );
 
@@ -406,8 +443,9 @@ impl AutoSplitController {
                 info!(
                     "load base split region";
                     "region_id"=>region_id,
-                    "size"=>approximate_size,
-                    "keys"=>approximate_keys,
+                    "approximate size"=>approximate_size,
+                    "scan keys"=>max_scan_keys,
+                    "approximate keys"=>approximate_keys,
                     "qps"=>qps
                 );
                 let split_key = recorder.collect(&self.cfg);
