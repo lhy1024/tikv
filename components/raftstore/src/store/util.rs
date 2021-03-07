@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::{fmt, u64};
 
 use collections::HashMap;
-use kvproto::kvrpcpb::KeyRange;
+use rand::Rng;
+use time::{Duration, Timespec};
+
 use kvproto::metapb::{self, PeerRole};
 use kvproto::raft_cmdpb::{AdminCmdType, ChangePeerRequest, ChangePeerV2Request, RaftCmdRequest};
 use kvproto::raft_serverpb::RaftMessage;
@@ -16,11 +18,10 @@ use raft::eraftpb::{self, ConfChangeType, ConfState, MessageType};
 use raft::INVALID_INDEX;
 use raft_proto::ConfChangeI;
 use tikv_util::time::monotonic_raw_now;
-use time::{Duration, Timespec};
+use tikv_util::Either;
 
 use super::peer_storage;
 use crate::{Error, Result};
-use tikv_util::Either;
 
 pub fn find_peer(region: &metapb::Region, store_id: u64) -> Option<&metapb::Peer> {
     region
@@ -344,6 +345,37 @@ pub fn check_peer_id(req: &RaftCmdRequest, peer_id: u64) -> Result<()> {
     }
 }
 
+#[derive(Default, Debug, Clone)]
+pub struct KeyRange {
+    pub start_key: Vec<u8>,
+    pub end_key: Vec<u8>,
+    pub processed_keys_num: Option<usize>,
+    pub processed_size: Option<u64>,
+    pub scan_sample_keys: Option<Vec<Vec<u8>>>,
+}
+
+impl KeyRange {
+    pub fn set_start_key(&mut self, start_key: Vec<u8>) {
+        self.start_key = start_key;
+    }
+
+    pub fn set_end_key(&mut self, end_key: Vec<u8>) {
+        self.end_key = end_key;
+    }
+
+    pub fn set_processed_keys_num(&mut self, processed_keys_num: usize) {
+        self.processed_keys_num = Some(processed_keys_num);
+    }
+
+    pub fn set_processed_size(&mut self, processed_size: u64) {
+        self.processed_size = Some(processed_size);
+    }
+
+    pub fn set_scan_sample_keys(&mut self, scan_sample_keys: Vec<Vec<u8>>) {
+        self.scan_sample_keys = Some(scan_sample_keys);
+    }
+}
+
 #[inline]
 pub fn build_key_range(start_key: &[u8], end_key: &[u8], reverse_scan: bool) -> KeyRange {
     let mut range = KeyRange::default();
@@ -355,6 +387,32 @@ pub fn build_key_range(start_key: &[u8], end_key: &[u8], reverse_scan: bool) -> 
         range.set_end_key(end_key.to_vec());
     }
     range
+}
+
+#[derive(Debug, Clone)]
+pub struct ReservoirSampling<T> {
+    pub total: usize,
+    pub capacity: usize,
+    pub results: Vec<T>,
+}
+impl<T> ReservoirSampling<T> {
+    pub fn new(capacity: usize) -> ReservoirSampling<T> {
+        ReservoirSampling {
+            total: 0,
+            capacity,
+            results: Vec::with_capacity(capacity),
+        }
+    }
+    pub fn append(&mut self, data: T) {
+        if self.total < self.capacity {
+            self.results.push(data);
+        } else {
+            let i = rand::thread_rng().gen_range(0, self.total) as usize;
+            if i < self.capacity {
+                self.results[i] = data;
+            }
+        }
+    }
 }
 
 /// Check if replicas of two regions are on the same stores.

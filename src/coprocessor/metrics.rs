@@ -6,7 +6,7 @@ use std::mem;
 use crate::storage::{kv::PerfStatisticsDelta, FlowStatsReporter, Statistics};
 use collections::HashMap;
 use kvproto::metapb;
-use raftstore::store::util::build_key_range;
+use raftstore::store::util::KeyRange;
 use raftstore::store::ReadStats;
 
 use crate::server::metrics::{GcKeysCF, GcKeysDetail};
@@ -392,16 +392,12 @@ pub fn tls_collect_qps(
     region_id: u64,
     peer: &metapb::Peer,
     epoch: &metapb::RegionEpoch,
-    start_key: &[u8],
-    end_key: &[u8],
-    reverse_scan: bool,
+    key_range:KeyRange,
 ) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        let key_range = build_key_range(start_key, end_key, reverse_scan);
         m.local_read_stats
             .add_qps(region_id, peer, epoch, key_range);
-        // 添加入 sample_keys
     });
 }
 

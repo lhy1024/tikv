@@ -11,9 +11,8 @@ use std::mem;
 use crate::server::metrics::{GcKeysCF as ServerGcKeysCF, GcKeysDetail as ServerGcKeysDetail};
 use crate::storage::kv::{FlowStatsReporter, Statistics};
 use collections::HashMap;
-use kvproto::kvrpcpb::KeyRange;
 use kvproto::metapb;
-use raftstore::store::util::build_key_range;
+use raftstore::store::util::{build_key_range,KeyRange};
 use raftstore::store::ReadStats;
 
 struct StorageLocalMetrics {

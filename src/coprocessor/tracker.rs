@@ -6,6 +6,7 @@ use kvproto::kvrpcpb::ScanDetailV2;
 use crate::storage::kv::PerfStatisticsDelta;
 
 use engine_rocks::set_perf_level;
+use raftstore::store::util::build_key_range;
 use tikv_util::time::{self, Duration, Instant};
 
 use super::metrics::*;
@@ -331,14 +332,14 @@ impl Tracker {
             false
         };
 
-        tls_collect_qps(
-            region_id,
-            peer,
-            epoch,
+        let mut key_range = build_key_range(
             Key::from_raw(start_key).as_encoded(),
             Key::from_raw(end_key).as_encoded(),
             reverse_scan,
         );
+        key_range.set_processed_keys_num(total_storage_stats.write.processed_keys);
+        // 添加入 sample_keys
+        tls_collect_qps(region_id, peer, epoch, key_range);
         self.current_stage = TrackerState::Tracked;
     }
 }

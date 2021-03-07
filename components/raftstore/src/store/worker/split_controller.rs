@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::slice::Iter;
 use std::time::{Duration, SystemTime};
 
-use kvproto::kvrpcpb::KeyRange;
+use crate::store::util::{KeyRange, ReservoirSampling};
 use kvproto::metapb::{Peer, RegionEpoch};
 
 use rand::Rng;
@@ -74,9 +74,9 @@ where
 {
     let mut rng = rand::thread_rng();
     let mut key_ranges = vec![];
-    let high_bound = pre_sum.last().unwrap();
-    for _num in 0..sample_num {
-        let d = rng.gen_range(0, *high_bound) as usize;
+    let high_bound = *pre_sum.last().unwrap();
+    for _ in 0..high_bound {
+        let d = rng.gen_range(0, high_bound) as usize;
         let i = match pre_sum.binary_search(&d) {
             Ok(i) => i,
             Err(i) => i,
@@ -88,6 +88,9 @@ where
                 key_ranges.push(list.remove(j)); // Sampling without replacement
             }
         }
+        if key_ranges.len() == sample_num {
+            break;
+        }
     }
     key_ranges
 }
@@ -96,60 +99,47 @@ where
 // And it will save qps num and peer.
 #[derive(Debug, Clone)]
 pub struct RegionInfo {
-    pub sample_num: usize,
-    pub qps: usize,
     pub peer: Peer,
     pub epoch: RegionEpoch,
-    pub key_ranges: Vec<KeyRange>,
     pub approximate_size: u64,
     pub approximate_key: u64,
     pub flow: FlowStatistics,
+    pub reservoir_sampling: ReservoirSampling<KeyRange>,
 }
 
 impl RegionInfo {
     fn new(sample_num: usize) -> RegionInfo {
         RegionInfo {
-            sample_num,
-            qps: 0,
-            key_ranges: Vec::with_capacity(sample_num),
             peer: Peer::default(),
             epoch: RegionEpoch::default(),
             approximate_size: 0,
             approximate_key: 0,
             flow: FlowStatistics::default(),
+            reservoir_sampling: ReservoirSampling::new(sample_num),
         }
     }
 
     fn get_qps(&self) -> usize {
-        self.qps
+        self.reservoir_sampling.total
     }
 
     fn get_key_ranges_mut(&mut self) -> &mut Vec<KeyRange> {
-        &mut self.key_ranges
+        &mut self.reservoir_sampling.results
     }
 
     fn add_key_ranges(&mut self, key_ranges: Vec<KeyRange>) {
-        // 拆分到 util 变成可被 coprocessor 调用的
-        self.qps += key_ranges.len();
         for key_range in key_ranges {
-            if self.key_ranges.len() < self.sample_num {
-                self.key_ranges.push(key_range);
-            } else {
-                let i = rand::thread_rng().gen_range(0, self.qps) as usize;
-                if i < self.sample_num {
-                    self.key_ranges[i] = key_range;
-                }
-            }
+            self.reservoir_sampling.append(key_range);
         }
     }
 
-    fn update_peer(&mut self, peer: &Peer) {
+    fn set_peer(&mut self, peer: &Peer) {
         if self.peer != *peer {
             self.peer = peer.clone();
         }
     }
 
-    fn update_epoch(&mut self, epoch: &RegionEpoch) {
+    fn set_epoch(&mut self, epoch: &RegionEpoch) {
         if self.epoch != *epoch {
             self.epoch = epoch.clone();
         }
@@ -305,8 +295,8 @@ impl ReadStats {
             .region_infos
             .entry(region_id)
             .or_insert_with(|| RegionInfo::new(num));
-        region_info.update_peer(peer);
-        region_info.update_epoch(epoch);
+        region_info.set_peer(peer);
+        region_info.set_epoch(epoch);
         region_info.add_key_ranges(key_ranges);
     }
 
