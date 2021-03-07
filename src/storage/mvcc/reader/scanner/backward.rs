@@ -11,7 +11,6 @@ use crate::coprocessor::metrics::tls_sample_key;
 use crate::storage::kv::{Cursor, Snapshot, Statistics, SEEK_BOUND};
 use crate::storage::mvcc::{Error, NewerTsCheckState, Result};
 
-
 // When there are many versions for the user key, after several tries,
 // we will use seek to locate the right position. But this will turn around
 // the write cf's iterator's direction inside RocksDB, and the next user key
@@ -98,6 +97,7 @@ impl<S: Snapshot> BackwardKvScanner<S> {
 
         // Similar to forward scanner, the general idea is to simultaneously step write
         // cursor and lock cursor. Please refer to `ForwardKvScanner` for details.
+
         loop {
             let (current_user_key, has_write, has_lock) = {
                 let w_key = if self.write_cursor.valid()? {
