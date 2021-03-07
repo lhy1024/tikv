@@ -395,23 +395,27 @@ pub struct ReservoirSampling<T> {
     pub capacity: usize,
     pub results: Vec<T>,
 }
-impl<T> ReservoirSampling<T> {
-    pub fn new(capacity: usize) -> ReservoirSampling<T> {
+impl<T: std::clone::Clone> ReservoirSampling<T> {
+    pub fn new(capacity: usize) -> ReservoirSampling<T> { // 如何保证 capacity != 0 
         ReservoirSampling {
             total: 0,
             capacity,
             results: Vec::with_capacity(capacity),
         }
     }
-    pub fn append(&mut self, data: T) {
+    pub fn append(&mut self, data: &T) {
         if self.total < self.capacity {
-            self.results.push(data);
+            self.results.push(data.clone());
         } else {
             let i = rand::thread_rng().gen_range(0, self.total) as usize;
             if i < self.capacity {
-                self.results[i] = data;
+                self.results[i] = data.clone();
             }
         }
+    }
+    pub fn clear(&mut self) {
+        self.total = 0;
+        self.results.clear();
     }
 }
 

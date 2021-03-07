@@ -339,6 +339,9 @@ impl Tracker {
         );
         key_range.set_processed_keys_num(total_storage_stats.write.processed_keys);
         // 添加入 sample_keys
+        // let mut read_stats = ReadStats::default();
+        // mem::swap(&mut read_stats, &mut m.local_read_stats);
+        // reporter.report_read_stats(read_stats);
         tls_collect_qps(region_id, peer, epoch, key_range);
         self.current_stage = TrackerState::Tracked;
     }

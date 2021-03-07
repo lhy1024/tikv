@@ -128,7 +128,7 @@ impl RegionInfo {
     }
 
     fn add_key_ranges(&mut self, key_ranges: Vec<KeyRange>) {
-        for key_range in key_ranges {
+        for key_range in &key_ranges {
             self.reservoir_sampling.append(key_range);
         }
     }

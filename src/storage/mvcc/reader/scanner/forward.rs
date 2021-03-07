@@ -7,6 +7,7 @@ use kvproto::kvrpcpb::{ExtraOp, IsolationLevel};
 use txn_types::{Key, Lock, LockType, TimeStamp, Value, WriteRef, WriteType};
 
 use super::ScannerConfig;
+use crate::coprocessor::metrics::tls_sample_key;
 use crate::storage::kv::SEEK_BOUND;
 use crate::storage::mvcc::{NewerTsCheckState, Result};
 use crate::storage::txn::{Result as TxnResult, TxnEntry, TxnEntryScanner};
@@ -181,7 +182,6 @@ impl<S: Snapshot, P: ScanPolicy<S>> ForwardScanner<S, P> {
 
         // TODO: We don't need to seek lock CF if isolation level is RC.
 
-        // 返回前进行采样
         loop {
             // `current_user_key` is `min(user_key(write_cursor), lock_cursor)`, indicating
             // the encoded user key we are currently dealing with. It may not have a write, or
@@ -415,7 +415,10 @@ impl<S: Snapshot> ScanPolicy<S> for LatestKvPolicy {
         };
         cursors.move_write_cursor_to_next_user_key(&current_user_key, statistics)?;
         Ok(match value {
-            Some(v) => HandleRes::Return((current_user_key, v)),
+            Some(v) => {
+                tls_sample_key(&current_user_key);
+                HandleRes::Return((current_user_key, v))
+            }
             _ => HandleRes::Skip(current_user_key),
         })
     }
@@ -527,7 +530,10 @@ impl<S: Snapshot> ScanPolicy<S> for LatestEntryPolicy {
         };
         cursors.move_write_cursor_to_next_user_key(&current_user_key, statistics)?;
         Ok(match entry {
-            Some(entry) => HandleRes::Return(entry),
+            Some(entry) => {
+                tls_sample_key(&current_user_key);
+                HandleRes::Return(entry)
+            }
             _ => HandleRes::Skip(current_user_key),
         })
     }
@@ -733,7 +739,7 @@ impl<S: Snapshot> ScanPolicy<S> for DeltaEntryPolicy {
                 write,
                 old_value,
             }));
-
+            tls_sample_key(&current_user_key);
             return res;
         }
     }

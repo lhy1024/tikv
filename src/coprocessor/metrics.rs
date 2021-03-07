@@ -6,12 +6,15 @@ use std::mem;
 use crate::storage::{kv::PerfStatisticsDelta, FlowStatsReporter, Statistics};
 use collections::HashMap;
 use kvproto::metapb;
-use raftstore::store::util::KeyRange;
+use raftstore::store::util::{KeyRange, ReservoirSampling};
 use raftstore::store::ReadStats;
+use txn_types::Key;
 
 use crate::server::metrics::{GcKeysCF, GcKeysDetail};
 use prometheus::*;
 use prometheus_static_metric::*;
+
+const SAMPLE_NUM: usize = 10;
 
 make_auto_flush_static_metric! {
     pub label_enum ReqTag {
@@ -241,6 +244,7 @@ pub struct CopLocalMetrics {
     local_scan_details: HashMap<ReqTag, Statistics>,
     local_read_stats: ReadStats,
     local_perf_stats: HashMap<ReqTag, PerfStatisticsDelta>,
+    local_sample_keys: ReservoirSampling<Key>,
 }
 
 thread_local! {
@@ -249,6 +253,7 @@ thread_local! {
             local_scan_details: HashMap::default(),
             local_read_stats: ReadStats::default(),
             local_perf_stats: HashMap::default(),
+            local_sample_keys:ReservoirSampling::new(SAMPLE_NUM),
         }
     );
 }
@@ -392,12 +397,19 @@ pub fn tls_collect_qps(
     region_id: u64,
     peer: &metapb::Peer,
     epoch: &metapb::RegionEpoch,
-    key_range:KeyRange,
+    key_range: KeyRange,
 ) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
         m.local_read_stats
             .add_qps(region_id, peer, epoch, key_range);
+    });
+}
+
+pub fn tls_sample_key(key: &Key) {
+    TLS_COP_METRICS.with(|m| {
+        let mut m = m.borrow_mut();
+        m.local_sample_keys.append(key);
     });
 }
 

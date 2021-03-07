@@ -7,8 +7,10 @@ use kvproto::kvrpcpb::IsolationLevel;
 use txn_types::{Key, Lock, TimeStamp, Value, Write, WriteRef, WriteType};
 
 use super::ScannerConfig;
+use crate::coprocessor::metrics::tls_sample_key;
 use crate::storage::kv::{Cursor, Snapshot, Statistics, SEEK_BOUND};
 use crate::storage::mvcc::{Error, NewerTsCheckState, Result};
+
 
 // When there are many versions for the user key, after several tries,
 // we will use seek to locate the right position. But this will turn around
@@ -96,7 +98,6 @@ impl<S: Snapshot> BackwardKvScanner<S> {
 
         // Similar to forward scanner, the general idea is to simultaneously step write
         // cursor and lock cursor. Please refer to `ForwardKvScanner` for details.
-        // 返回前进行采样
         loop {
             let (current_user_key, has_write, has_lock) = {
                 let w_key = if self.write_cursor.valid()? {
@@ -180,6 +181,7 @@ impl<S: Snapshot> BackwardKvScanner<S> {
 
             if let Some(v) = result? {
                 self.statistics.write.processed_keys += 1;
+                tls_sample_key(&current_user_key);
                 return Ok(Some((current_user_key, v)));
             }
         }
