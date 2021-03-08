@@ -451,7 +451,6 @@ impl<T: std::clone::Clone> ReservoirSampling<T> {
             SampleStatus::Replace(i) => self.results[*i] = data,
         }
         self.total += 1;
-        info!("total split";"total"=>self.total);
     }
 
     pub fn clear(&mut self) {

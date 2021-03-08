@@ -424,10 +424,6 @@ impl AutoSplitController {
         for (region_id, region_infos) in region_infos_map {
             let pre_sum = prefix_sum(region_infos.infos.iter(), RegionInfo::get_qps); // region_infos is not empty
             let qps = region_infos.qps;
-            for num in &pre_sum {
-                info!("qps pre_sum";"pre_sum"=>*num);
-            }
-            info!("qps";"qps"=>qps);
             if qps < self.cfg.qps_threshold {
                 if self.recorders.contains_key(&region_id) {
                     READ_QPS_TOPN

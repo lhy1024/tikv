@@ -405,10 +405,11 @@ pub fn tls_prepare_sample(region_id: u64) {
 
 pub fn tls_collect_sample_key(key: &Key) {
     TLS_COP_METRICS.with(|m| {
-        let mut m = m.borrow_mut();
-        if let SampleStatus::Skip = m.local_sample_status {
+        let tls = m.borrow();
+        if let SampleStatus::Skip = tls.local_sample_status {
             return;
         }
+        let mut m = m.borrow_mut();
         m.local_sample_keys.stream(key.as_encoded().to_vec());
     });
 }
