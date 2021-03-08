@@ -425,6 +425,8 @@ pub fn tls_collect_qps(
         let mut m = m.borrow_mut();
         let status = m.local_sample_status.clone();
         if status == SampleStatus::Skip {
+            m.local_read_stats
+                .update_max_processed_keys(region_id, processed_keys);
             return;
         }
 

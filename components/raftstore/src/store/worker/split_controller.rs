@@ -103,7 +103,7 @@ pub struct RegionInfo {
     pub approximate_key: u64,
     pub flow: FlowStatistics,
     pub key_ranges: ReservoirSampling<KeyRange>,
-    pub max_scan_keys: usize,
+    pub max_processed_keys: usize,
 }
 
 impl RegionInfo {
@@ -114,7 +114,7 @@ impl RegionInfo {
             approximate_key: 0,
             flow: FlowStatistics::default(),
             key_ranges: ReservoirSampling::new(sample_num),
-            max_scan_keys: 0,
+            max_processed_keys: 0,
         }
     }
 
@@ -128,14 +128,18 @@ impl RegionInfo {
 
     fn add_key_ranges(&mut self, key_ranges: Vec<KeyRange>, status: Option<SampleStatus>) {
         for key_range in key_ranges {
-            if let Some(scan_keys) = key_range.processed_keys_num {
-                self.max_scan_keys = max(self.max_scan_keys, scan_keys);
+            if let Some(keys) = key_range.processed_keys_num {
+                self.update_max_processed_keys(keys);
             }
             match &status {
                 Some(status) => self.key_ranges.commit(status, key_range),
                 None => self.key_ranges.stream(key_range),
             }
         }
+    }
+
+    fn update_max_processed_keys(&mut self, processed_keys: usize) {
+        self.max_processed_keys = max(self.max_processed_keys, processed_keys);
     }
 
     fn set_peer(&mut self, peer: &Peer) {
@@ -148,7 +152,7 @@ impl RegionInfo {
 pub struct RegionInfos {
     pub qps: usize,
     pub infos: Vec<RegionInfo>,
-    pub max_scan_keys: usize,
+    pub max_processed_keys: usize,
     pub approximate_keys: u64,
     pub approximate_size: u64,
 }
@@ -158,13 +162,13 @@ impl RegionInfos {
         RegionInfos {
             infos: vec![],
             qps: 0,
-            max_scan_keys: 0,
+            max_processed_keys: 0,
             approximate_keys: 0,
             approximate_size: 0,
         }
     }
     pub fn push(&mut self, info: RegionInfo) {
-        self.max_scan_keys = max(self.max_scan_keys, info.max_scan_keys);
+        self.max_processed_keys = max(self.max_processed_keys, info.max_processed_keys);
         self.approximate_size = max(self.approximate_size, info.approximate_size);
         self.approximate_keys = max(self.approximate_keys, info.approximate_key);
         self.qps += info.get_qps();
@@ -347,6 +351,11 @@ impl ReadStats {
         region_info.key_ranges.prepare()
     }
 
+    pub fn update_max_processed_keys(&mut self, region_id: u64, processed_keys: usize) {
+        let region_info = self.get_or_insert(region_id);
+        region_info.update_max_processed_keys(processed_keys)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.region_infos.is_empty()
     }
@@ -435,8 +444,16 @@ impl AutoSplitController {
 
             let approximate_keys = region_infos.approximate_keys;
             let approximate_size = region_infos.approximate_size;
-            let max_scan_keys = region_infos.max_scan_keys;
-            if max_scan_keys > (region_infos.approximate_keys / 10) as usize {
+            let max_processed_keys = region_infos.max_processed_keys;
+            info!(
+                "split params";
+                "region_id"=>region_id,
+                "approximate size"=>approximate_size,
+                "processed keys"=>max_processed_keys,
+                "approximate keys"=>approximate_keys,
+                "qps"=>qps
+            );
+            if max_processed_keys > (region_infos.approximate_keys / 10) as usize {
                 LOAD_BASE_SPLIT_EVENT
                     .with_label_values(&["hit_copr_keys"])
                     .inc();
@@ -470,7 +487,7 @@ impl AutoSplitController {
                     "load base split region";
                     "region_id"=>region_id,
                     "approximate size"=>approximate_size,
-                    "scan keys"=>max_scan_keys,
+                    "processed keys"=>max_processed_keys,
                     "approximate keys"=>approximate_keys,
                     "qps"=>qps
                 );
