@@ -75,7 +75,7 @@ impl Tracker {
     /// has to be recorded.
     pub fn new(req_ctx: ReqContext, slow_log_threshold: Duration) -> Tracker {
         let now = Instant::now_coarse();
-        tls_prepare_sample(req_ctx.region_id);
+        tls_prepare_sample(req_ctx.context.get_region_id());
         Tracker {
             request_begin_at: now,
             current_stage: TrackerState::Initialized,
