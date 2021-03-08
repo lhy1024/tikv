@@ -429,7 +429,6 @@ impl<T: std::clone::Clone> ReservoirSampling<T> {
     pub fn stream(&mut self, data: T) {
         let status = self.prepare();
         self.commit(&status, data);
-        self.total += 1;
     }
 
     pub fn prepare(&mut self) -> SampleStatus {
@@ -451,6 +450,7 @@ impl<T: std::clone::Clone> ReservoirSampling<T> {
             SampleStatus::Skip => {}
             SampleStatus::Replace(i) => self.results[*i] = data,
         }
+        self.total += 1;
     }
 
     pub fn clear(&mut self) {
