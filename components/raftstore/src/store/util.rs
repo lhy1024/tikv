@@ -400,7 +400,6 @@ pub fn build_key_range(start_key: &[u8], end_key: &[u8], reverse_scan: bool) -> 
     }
     range
 }
-#[derive(Debug, Clone, PartialEq)]
 pub enum SampleStatus {
     Push,
     Skip,

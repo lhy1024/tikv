@@ -406,7 +406,7 @@ pub fn tls_prepare_sample(region_id: u64) {
 pub fn tls_collect_sample_key(key: &Key) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        if m.local_sample_status == SampleStatus::Skip {
+        if let SampleStatus::Skip = m.local_sample_status {
             return;
         }
         m.local_sample_keys.stream(key.as_encoded().to_vec());
@@ -423,12 +423,8 @@ pub fn tls_collect_qps(
 ) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        let status = m.local_sample_status.clone();
-        if status == SampleStatus::Skip {
-            m.local_read_stats
-                .update_max_processed_keys(region_id, processed_keys);
-            return;
-        }
+        let mut status = SampleStatus::Skip;
+        mem::swap(&mut m.local_sample_status, &mut status);
 
         let mut key_range = build_key_range(
             Key::from_raw(start_key).as_encoded(),
