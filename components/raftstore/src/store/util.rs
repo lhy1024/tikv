@@ -7,9 +7,9 @@ use std::sync::Arc;
 use std::{fmt, u64};
 
 use collections::HashMap;
+use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::Rng;
-use rand::prelude::*;
 use time::{Duration, Timespec};
 
 use kvproto::metapb::{self, PeerRole};
@@ -21,7 +21,6 @@ use raft::INVALID_INDEX;
 use raft_proto::ConfChangeI;
 use tikv_util::time::monotonic_raw_now;
 use tikv_util::Either;
-use txn_types::Key;
 
 use super::peer_storage;
 use crate::{Error, Result};
@@ -401,6 +400,12 @@ pub fn build_key_range(start_key: &[u8], end_key: &[u8], reverse_scan: bool) -> 
     }
     range
 }
+#[derive(Debug, Clone, PartialEq)]
+pub enum SampleStatus {
+    Push,
+    Skip,
+    Replace(usize),
+}
 
 #[derive(Debug, Clone)]
 pub struct ReservoirSampling<T> {
@@ -421,17 +426,34 @@ impl<T: std::clone::Clone> ReservoirSampling<T> {
             rng: SeedableRng::from_entropy(),
         }
     }
-    pub fn append(&mut self, data: T) {
+
+    pub fn stream(&mut self, data: T) {
+        let status = self.prepare();
+        self.commit(&status, data);
+        self.total += 1;
+    }
+
+    pub fn prepare(&mut self) -> SampleStatus {
         if self.total < self.capacity {
-            self.results.push(data);
+            SampleStatus::Push
         } else {
             let i = self.rng.gen_range(0, self.total) as usize;
             if i < self.capacity {
-                self.results[i] = data;
+                SampleStatus::Replace(i)
+            } else {
+                SampleStatus::Skip
             }
         }
-        self.total += 1;
     }
+
+    pub fn commit(&mut self, status: &SampleStatus, data: T) {
+        match status {
+            SampleStatus::Push => self.results.push(data),
+            SampleStatus::Skip => {}
+            SampleStatus::Replace(i) => self.results[*i] = data,
+        }
+    }
+
     pub fn clear(&mut self) {
         self.total = 0;
         self.results.clear();

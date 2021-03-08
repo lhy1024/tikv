@@ -331,14 +331,14 @@ impl Tracker {
             false
         };
 
-        let mut key_range = build_key_range(
-            Key::from_raw(start_key).as_encoded(),
-            Key::from_raw(end_key).as_encoded(),
+        tls_collect_qps(
+            region_id,
+            peer,
+            start_key,
+            end_key,
             reverse_scan,
+            total_storage_stats.write.processed_keys,
         );
-        key_range.set_processed_keys_num(total_storage_stats.write.processed_keys);
-        key_range.set_scan_sample_keys(tls_move_sample_key());
-        tls_collect_qps(region_id, peer, key_range);
         self.current_stage = TrackerState::Tracked;
     }
 }

@@ -86,7 +86,7 @@ pub fn tls_collect_qps(
         let mut m = m.borrow_mut();
         let key_range = build_key_range(start_key, end_key, reverse_scan);
         m.local_read_stats
-            .add_qps(region_id, peer,  key_range);
+            .add_qps(region_id, peer,  key_range,None);
     });
 }
 
@@ -98,7 +98,7 @@ pub fn tls_collect_qps_batch(
     TLS_STORAGE_METRICS.with(|m| {
         let mut m = m.borrow_mut();
         m.local_read_stats
-            .add_qps_batch(region_id, peer,  key_ranges);
+            .add_qps_batch(region_id, peer,  key_ranges,None);
     });
 }
 

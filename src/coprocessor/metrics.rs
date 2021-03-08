@@ -6,7 +6,7 @@ use std::mem;
 use crate::storage::{kv::PerfStatisticsDelta, FlowStatsReporter, Statistics};
 use collections::HashMap;
 use kvproto::metapb;
-use raftstore::store::util::{KeyRange, ReservoirSampling};
+use raftstore::store::util::{build_key_range, KeyRange, ReservoirSampling, SampleStatus};
 use raftstore::store::ReadStats;
 use txn_types::Key;
 
@@ -245,6 +245,7 @@ pub struct CopLocalMetrics {
     local_read_stats: ReadStats,
     local_perf_stats: HashMap<ReqTag, PerfStatisticsDelta>,
     local_sample_keys: ReservoirSampling<Vec<u8>>,
+    local_sample_status: SampleStatus,
 }
 
 thread_local! {
@@ -254,6 +255,7 @@ thread_local! {
             local_read_stats: ReadStats::default(),
             local_perf_stats: HashMap::default(),
             local_sample_keys:ReservoirSampling::new(SAMPLE_NUM),
+            local_sample_status:SampleStatus::Skip,
         }
     );
 }
@@ -393,28 +395,55 @@ pub fn tls_collect_read_flow(region_id: u64, statistics: &Statistics) {
     });
 }
 
-pub fn tls_collect_qps(region_id: u64, peer: &metapb::Peer, key_range: KeyRange) {
+pub fn tls_prepare_sample(region_id: u64) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        m.local_read_stats.add_qps(region_id, peer, key_range);
+        let status = m.local_read_stats.get_sample_status(region_id);
+        m.local_sample_status = status;
     });
 }
 
 pub fn tls_collect_sample_key(key: &Key) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        m.local_sample_keys.append(key.as_encoded().to_vec());
+        if m.local_sample_status == SampleStatus::Skip {
+            return;
+        }
+        m.local_sample_keys.stream(key.as_encoded().to_vec());
     });
 }
 
-pub fn tls_move_sample_key() -> Vec<Vec<u8>> {
-    let mut sample_keys = vec![];
+pub fn tls_collect_qps(
+    region_id: u64,
+    peer: &metapb::Peer,
+    start_key: &[u8],
+    end_key: &[u8],
+    reverse_scan: bool,
+    processed_keys: usize,
+) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        mem::swap(&mut sample_keys, &mut m.local_sample_keys.results);
+        let status = m.local_sample_status.clone();
+        if status == SampleStatus::Skip {
+            return;
+        }
+
+        let mut key_range = build_key_range(
+            Key::from_raw(start_key).as_encoded(),
+            Key::from_raw(end_key).as_encoded(),
+            reverse_scan,
+        );
+        key_range.set_processed_keys_num(processed_keys);
+
+        let mut scan_sample_keys = vec![];
+        mem::swap(&mut scan_sample_keys, &mut m.local_sample_keys.results);
+        key_range.set_scan_sample_keys(scan_sample_keys);
+
         m.local_sample_keys.clear();
+
+        m.local_read_stats
+            .add_qps(region_id, peer, key_range, Some(status));
     });
-    sample_keys
 }
 
 pub fn tls_collect_perf_stats(cmd: ReqTag, perf_stats: &PerfStatisticsDelta) {
