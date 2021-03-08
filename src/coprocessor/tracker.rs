@@ -6,14 +6,11 @@ use kvproto::kvrpcpb::ScanDetailV2;
 use crate::storage::kv::PerfStatisticsDelta;
 
 use engine_rocks::set_perf_level;
-use raftstore::store::util::build_key_range;
 use tikv_util::time::{self, Duration, Instant};
 
 use super::metrics::*;
 use crate::coprocessor::*;
 use crate::storage::Statistics;
-
-use txn_types::Key;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TrackerState {
@@ -78,6 +75,7 @@ impl Tracker {
     /// has to be recorded.
     pub fn new(req_ctx: ReqContext, slow_log_threshold: Duration) -> Tracker {
         let now = Instant::now_coarse();
+        tls_prepare_sample(req_ctx.region_id);
         Tracker {
             request_begin_at: now,
             current_stage: TrackerState::Initialized,

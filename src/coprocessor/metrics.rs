@@ -6,7 +6,7 @@ use std::mem;
 use crate::storage::{kv::PerfStatisticsDelta, FlowStatsReporter, Statistics};
 use collections::HashMap;
 use kvproto::metapb;
-use raftstore::store::util::{build_key_range, KeyRange, ReservoirSampling, SampleStatus};
+use raftstore::store::util::{build_key_range, ReservoirSampling, SampleStatus};
 use raftstore::store::ReadStats;
 use txn_types::Key;
 
