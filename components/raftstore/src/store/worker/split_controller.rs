@@ -164,8 +164,8 @@ impl RegionInfos {
         self.max_scan_keys = max(self.max_scan_keys, info.max_scan_keys);
         self.approximate_size = max(self.approximate_size, info.approximate_size);
         self.approximate_keys = max(self.approximate_keys, info.approximate_key);
-        self.infos.push(info);
         self.qps += info.get_qps();
+        self.infos.push(info);
     }
 
     pub fn get_peer(&self) -> Peer {
@@ -396,8 +396,8 @@ impl AutoSplitController {
         for (region_id, region_infos) in region_infos_map {
             let pre_sum = prefix_sum(region_infos.infos.iter(), RegionInfo::get_qps); // region_infos is not empty
             let qps = region_infos.qps;
-            for num in pre_sum {
-                info!("qps pre_sum";"pre_sum"=>num);
+            for num in &pre_sum {
+                info!("qps pre_sum";"pre_sum"=>*num);
             }
             info!("qps";"qps"=>qps);
             if qps < self.cfg.qps_threshold {
