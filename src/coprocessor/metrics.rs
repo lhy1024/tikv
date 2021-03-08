@@ -423,8 +423,6 @@ pub fn tls_collect_qps(
 ) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        let mut status = SampleStatus::Skip;
-        mem::swap(&mut m.local_sample_status, &mut status);
 
         let mut key_range = build_key_range(
             Key::from_raw(start_key).as_encoded(),
@@ -436,9 +434,10 @@ pub fn tls_collect_qps(
         let mut scan_sample_keys = vec![];
         mem::swap(&mut scan_sample_keys, &mut m.local_sample_keys.results);
         key_range.set_scan_sample_keys(scan_sample_keys);
-
         m.local_sample_keys.clear();
 
+        let mut status = SampleStatus::Skip;
+        mem::swap(&mut m.local_sample_status, &mut status);
         m.local_read_stats
             .add_qps(region_id, peer, key_range, Some(status));
     });
