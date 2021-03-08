@@ -352,7 +352,7 @@ pub struct KeyRange {
     pub end_key: Vec<u8>,
     pub processed_keys_num: Option<usize>,
     pub processed_size: Option<u64>,
-    pub scan_sample_keys: Option<Vec<Key>>,
+    pub scan_sample_keys: Option<Vec<Vec<u8>>>,
 }
 
 impl KeyRange {
@@ -382,7 +382,7 @@ impl KeyRange {
         self.processed_size = Some(processed_size);
     }
 
-    pub fn set_scan_sample_keys(&mut self, scan_sample_keys: Vec<Key>) {
+    pub fn set_scan_sample_keys(&mut self, scan_sample_keys: Vec<Vec<u8>>) {
         self.scan_sample_keys = Some(scan_sample_keys);
     }
 }
@@ -417,15 +417,16 @@ impl<T: std::clone::Clone> ReservoirSampling<T> {
             results: Vec::with_capacity(capacity),
         }
     }
-    pub fn append(&mut self, data: &T) {
+    pub fn append(&mut self, data: T) {
         if self.total < self.capacity {
-            self.results.push(data.clone());
+            self.results.push(data);
         } else {
             let i = rand::thread_rng().gen_range(0, self.total) as usize;
             if i < self.capacity {
-                self.results[i] = data.clone();
+                self.results[i] = data;
             }
         }
+        self.total += 1;
     }
     pub fn clear(&mut self) {
         self.total = 0;

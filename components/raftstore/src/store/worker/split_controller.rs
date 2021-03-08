@@ -127,11 +127,11 @@ impl RegionInfo {
     }
 
     fn add_key_ranges(&mut self, key_ranges: Vec<KeyRange>) {
-        for key_range in &key_ranges {
-            self.reservoir_sampling.append(key_range);
+        for key_range in key_ranges {
             if let Some(scan_keys) = key_range.processed_keys_num {
                 self.max_scan_keys = max(self.max_scan_keys, scan_keys);
             }
+            self.reservoir_sampling.append(key_range);
         }
     }
 
@@ -209,7 +209,7 @@ impl Recorder {
                 set.insert(&key_range.end_key);
                 if let Some(scan_sample_keys) = &key_range.scan_sample_keys {
                     for key in scan_sample_keys {
-                        set.insert(key.as_encoded());
+                        set.insert(&key);
                     }
                 };
                 set

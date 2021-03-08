@@ -244,7 +244,7 @@ pub struct CopLocalMetrics {
     local_scan_details: HashMap<ReqTag, Statistics>,
     local_read_stats: ReadStats,
     local_perf_stats: HashMap<ReqTag, PerfStatisticsDelta>,
-    local_sample_keys: ReservoirSampling<Key>,
+    local_sample_keys: ReservoirSampling<Vec<u8>>,
 }
 
 thread_local! {
@@ -403,11 +403,11 @@ pub fn tls_collect_qps(region_id: u64, peer: &metapb::Peer, key_range: KeyRange)
 pub fn tls_collect_sample_key(key: &Key) {
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        m.local_sample_keys.append(key);
+        m.local_sample_keys.append(key.as_encoded().to_vec());
     });
 }
 
-pub fn tls_move_sample_key() -> Vec<Key> {
+pub fn tls_move_sample_key() -> Vec<Vec<u8>> {
     let mut sample_keys = vec![];
     TLS_COP_METRICS.with(|m| {
         let mut m = m.borrow_mut();
