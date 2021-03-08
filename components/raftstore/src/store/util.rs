@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::{fmt, u64};
 
 use collections::HashMap;
+use rand::rngs::StdRng;
 use rand::Rng;
+use rand::prelude::*;
 use time::{Duration, Timespec};
 
 use kvproto::metapb::{self, PeerRole};
@@ -405,6 +407,7 @@ pub struct ReservoirSampling<T> {
     pub total: usize,
     pub capacity: usize,
     pub results: Vec<T>,
+    pub rng: StdRng,
 }
 impl<T: std::clone::Clone> ReservoirSampling<T> {
     pub fn new(capacity: usize) -> ReservoirSampling<T> {
@@ -415,13 +418,14 @@ impl<T: std::clone::Clone> ReservoirSampling<T> {
             total: 0,
             capacity,
             results: Vec::with_capacity(capacity),
+            rng: SeedableRng::from_entropy(),
         }
     }
     pub fn append(&mut self, data: T) {
         if self.total < self.capacity {
             self.results.push(data);
         } else {
-            let i = rand::thread_rng().gen_range(0, self.total) as usize;
+            let i = self.rng.gen_range(0, self.total) as usize;
             if i < self.capacity {
                 self.results[i] = data;
             }

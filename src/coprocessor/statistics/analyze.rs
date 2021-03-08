@@ -11,6 +11,7 @@ use kvproto::coprocessor::{KeyRange, Response};
 use protobuf::Message;
 use rand::rngs::StdRng;
 use rand::Rng;
+use rand::SeedableRng;
 use tidb_query_common::storage::scanner::{RangesScanner, RangesScannerOptions};
 use tidb_query_common::storage::Range;
 use tidb_query_datatype::codec::datum::{encode_value, split_datum, Datum, NIL_FLAG};
