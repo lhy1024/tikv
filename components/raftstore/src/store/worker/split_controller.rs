@@ -143,6 +143,7 @@ impl RegionInfo {
 }
 
 pub struct RegionInfos {
+    pub qps: usize,
     pub infos: Vec<RegionInfo>,
     pub max_scan_keys: usize,
     pub approximate_keys: u64,
@@ -153,6 +154,7 @@ impl RegionInfos {
     pub fn new() -> RegionInfos {
         RegionInfos {
             infos: vec![],
+            qps: 0,
             max_scan_keys: 0,
             approximate_keys: 0,
             approximate_size: 0,
@@ -163,6 +165,7 @@ impl RegionInfos {
         self.approximate_size = max(self.approximate_size, info.approximate_size);
         self.approximate_keys = max(self.approximate_keys, info.approximate_key);
         self.infos.push(info);
+        self.qps += info.get_qps();
     }
 
     pub fn get_peer(&self) -> Peer {
@@ -391,8 +394,12 @@ impl AutoSplitController {
         let region_infos_map = self.collect_read_stats(read_stats_vec);
 
         for (region_id, region_infos) in region_infos_map {
-            let pre_sum = prefix_sum(region_infos.infos.iter(), RegionInfo::get_qps);
-            let qps = *pre_sum.last().unwrap(); // region_infos is not empty
+            let pre_sum = prefix_sum(region_infos.infos.iter(), RegionInfo::get_qps); // region_infos is not empty
+            let qps = region_infos.qps;
+            for num in pre_sum {
+                info!("qps pre_sum";"pre_sum"=>num);
+            }
+            info!("qps";"qps"=>qps);
             if qps < self.cfg.qps_threshold {
                 if self.recorders.contains_key(&region_id) {
                     READ_QPS_TOPN
@@ -424,7 +431,7 @@ impl AutoSplitController {
             }
 
             let peer = region_infos.get_peer(); //todo peer 的隐患
-
+                                                //let pre_sum = prefix_sum(region_infos.infos.iter(), RegionInfo::get_qps);
             let num = self.cfg.detect_times;
             let recorder = self
                 .recorders
