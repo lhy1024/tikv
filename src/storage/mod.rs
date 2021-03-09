@@ -354,11 +354,6 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
         let res =
             self.read_pool.spawn_handle(
                 async move {
-                    for get in &requests {
-                        let region_id = get.get_context().get_region_id();
-                        let peer = get.get_context().get_peer();
-                        tls_collect_qps(region_id, peer,  &get.key, &get.key, false);
-                    }
                     KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                     KV_COMMAND_KEYREAD_HISTOGRAM_STATIC
                         .get(CMD)
@@ -370,6 +365,9 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     let mut req_snaps = vec![];
 
                     for mut req in requests {
+                        let region_id = req.get_context().get_region_id();
+                        let peer = req.get_context().get_peer();
+                        tls_collect_qps(region_id, peer, &req.get_key(), &req.get_key(), false);
                         let key = Key::from_raw(req.get_key());
                         let start_ts = req.get_version().into();
                         let mut ctx = req.take_context();
@@ -486,12 +484,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                 for key in &keys {
                     key_ranges.push(build_key_range(key.as_encoded(), key.as_encoded(), false));
                 }
-
-                tls_collect_qps_batch(
-                    ctx.get_region_id(),
-                    ctx.get_peer(),
-                    key_ranges,
-                );
+                tls_collect_qps_batch(ctx.get_region_id(), ctx.get_peer(), key_ranges);
 
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                 SCHED_COMMANDS_PRI_COUNTER_VEC_STATIC
@@ -585,18 +578,19 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
 
         let res = self.read_pool.spawn_handle(
             async move {
-                let mut key = &vec![];
-                if let Some(end_key) = &end_key {
-                    key = end_key.as_encoded();
+                {
+                    let end_key = match &end_key {
+                        Some(k) => k.as_encoded().as_slice(),
+                        None => &[],
+                    };
+                    tls_collect_qps(
+                        ctx.get_region_id(),
+                        ctx.get_peer(),
+                        start_key.as_encoded(),
+                        end_key,
+                        reverse_scan,
+                    );
                 }
-                tls_collect_qps(
-                    ctx.get_region_id(),
-                    ctx.get_peer(),
-                    start_key.as_encoded(),
-                    key,
-                    reverse_scan,
-                );
-
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                 SCHED_COMMANDS_PRI_COUNTER_VEC_STATIC
                     .get(priority_tag)
@@ -713,15 +707,15 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
         let res = self.read_pool.spawn_handle(
             async move {
                 if let Some(start_key) = &start_key {
-                    let mut key = &vec![];
-                    if let Some(end_key) = &end_key {
-                        key = end_key.as_encoded();
-                    }
+                    let end_key = match &end_key {
+                        Some(k) => k.as_encoded().as_slice(),
+                        None => &[],
+                    };
                     tls_collect_qps(
                         ctx.get_region_id(),
                         ctx.get_peer(),
                         start_key.as_encoded(),
-                        key,
+                        end_key,
                         false,
                     );
                 }
@@ -918,13 +912,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
 
         let res = self.read_pool.spawn_handle(
             async move {
-                tls_collect_qps(
-                    ctx.get_region_id(),
-                    ctx.get_peer(),
-                    &key,
-                    &key,
-                    false,
-                );
+                tls_collect_qps(ctx.get_region_id(), ctx.get_peer(), &key, &key, false);
 
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                 SCHED_COMMANDS_PRI_COUNTER_VEC_STATIC
@@ -978,7 +966,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                     let key = get.key.to_owned();
                     let region_id = get.get_context().get_region_id();
                     let peer = get.get_context().get_peer();
-                    tls_collect_qps(region_id, peer,  &key, &key, false);
+                    tls_collect_qps(region_id, peer, &key, &key, false);
                 }
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                 SCHED_COMMANDS_PRI_COUNTER_VEC_STATIC
@@ -1052,11 +1040,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                 for key in &keys {
                     key_ranges.push(build_key_range(key, key, false));
                 }
-                tls_collect_qps_batch(
-                    ctx.get_region_id(),
-                    ctx.get_peer(),
-                    key_ranges,
-                );
+                tls_collect_qps_batch(ctx.get_region_id(), ctx.get_peer(), key_ranges);
 
                 KV_COMMAND_COUNTER_VEC_STATIC.get(CMD).inc();
                 SCHED_COMMANDS_PRI_COUNTER_VEC_STATIC
@@ -1573,11 +1557,7 @@ impl<E: Engine, L: LockManager> Storage<E, L> {
                             reverse_scan,
                         ));
                     }
-                    tls_collect_qps_batch(
-                        ctx.get_region_id(),
-                        ctx.get_peer(),
-                        key_ranges,
-                    );
+                    tls_collect_qps_batch(ctx.get_region_id(), ctx.get_peer(), key_ranges);
                     metrics::tls_collect_read_flow(ctx.get_region_id(), &statistics);
                     KV_COMMAND_KEYREAD_HISTOGRAM_STATIC
                         .get(CMD)

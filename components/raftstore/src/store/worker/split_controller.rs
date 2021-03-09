@@ -20,7 +20,7 @@ use crate::store::worker::{FlowStatistics, SplitConfig, SplitConfigManager};
 
 pub struct SplitInfo {
     pub region_id: u64,
-    pub split_key: Option<Vec<u8>>,
+    pub split_key: Vec<u8>,
     pub peer: Peer,
 }
 #[derive(Debug)]
@@ -206,7 +206,7 @@ impl Recorder {
         self.times >= self.detect_num
     }
 
-    fn collect(&mut self, config: &SplitConfig) -> Option<Vec<u8>> {
+    fn collect(&mut self, config: &SplitConfig) -> Vec<u8> {
         let pre_sum = prefix_sum(self.key_ranges.iter(), Vec::len);
         let key_ranges = self.key_ranges.clone();
         let mut samples: Vec<Sample> = sample(config.sample_num, &pre_sum, key_ranges, |x| x)
@@ -266,7 +266,7 @@ impl Recorder {
         split_balance_score_threshold: f64,
         _split_contained_score: f64,
         sample_threshold: i32,
-    ) -> Option<Vec<u8>> {
+    ) -> Vec<u8> {
         let mut best_index: i32 = -1;
         let mut best_score = 2.0;
         for (index, sample) in samples.iter().enumerate() {
@@ -298,9 +298,9 @@ impl Recorder {
             }
         }
         if best_index >= 0 {
-            return Some(samples[best_index as usize].key.clone());
+            return samples[best_index as usize].key.clone();
         }
-        None
+        vec![]
     }
 }
 
@@ -479,6 +479,7 @@ impl AutoSplitController {
 
             recorder.record(key_ranges);
             if recorder.is_ready() {
+
                 info!(
                     "load base split region";
                     "region_id"=>region_id,
@@ -488,7 +489,7 @@ impl AutoSplitController {
                     "qps"=>qps
                 );
                 let split_key = recorder.collect(&self.cfg);
-                if split_key.is_none() {
+                if split_key.is_empty() {
                     LOAD_BASE_SPLIT_EVENT
                         .with_label_values(&["split_by_half"])
                         .inc();
@@ -499,9 +500,6 @@ impl AutoSplitController {
                     split_key,
                 });
                 self.recorders.remove(&region_id);
-                READ_QPS_TOPN
-                    .with_label_values(&[&region_id.to_string()])
-                    .set(0.0);
                 LOAD_BASE_SPLIT_EVENT
                     .with_label_values(&["prepare_to_split"])
                     .inc();

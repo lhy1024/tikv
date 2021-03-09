@@ -1062,13 +1062,13 @@ where
                     for split_info in split_infos {
                         let region_id = split_info.region_id;
                         if let Ok(Some(region)) = pd_client.get_region_by_id(region_id).await {
-                            if let Some(split_key) = split_info.split_key {
+                            if !split_info.split_key.is_empty() {
                                 Self::handle_ask_batch_split(
                                     router.clone(),
                                     scheduler.clone(),
                                     pd_client.clone(),
                                     region,
-                                    vec![split_key],
+                                    vec![split_info.split_key],
                                     split_info.peer,
                                     true,
                                     Callback::None,
