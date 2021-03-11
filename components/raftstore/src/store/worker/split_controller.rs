@@ -103,7 +103,6 @@ pub struct RegionInfo {
     pub approximate_key: u64,
     pub flow: FlowStatistics,
     pub reservoir_sampling: ReservoirSampling<KeyRange>,
-    pub max_scan_keys: usize,
 }
 
 impl RegionInfo {
@@ -114,7 +113,6 @@ impl RegionInfo {
             approximate_key: 0,
             flow: FlowStatistics::default(),
             reservoir_sampling: ReservoirSampling::new(sample_num),
-            max_scan_keys: 0,
         }
     }
 
@@ -128,9 +126,6 @@ impl RegionInfo {
 
     fn add_key_ranges(&mut self, key_ranges: Vec<KeyRange>) {
         for key_range in key_ranges {
-            if let Some(scan_keys) = key_range.processed_keys_num {
-                self.max_scan_keys = max(self.max_scan_keys, scan_keys);
-            }
             self.reservoir_sampling.append(key_range);
         }
     }
@@ -145,7 +140,6 @@ impl RegionInfo {
 pub struct RegionInfos {
     pub qps: usize,
     pub infos: Vec<RegionInfo>,
-    pub max_scan_keys: usize,
     pub approximate_keys: u64,
     pub approximate_size: u64,
 }
@@ -155,13 +149,11 @@ impl RegionInfos {
         RegionInfos {
             infos: vec![],
             qps: 0,
-            max_scan_keys: 0,
             approximate_keys: 0,
             approximate_size: 0,
         }
     }
     pub fn push(&mut self, info: RegionInfo) {
-        self.max_scan_keys = max(self.max_scan_keys, info.max_scan_keys);
         self.approximate_size = max(self.approximate_size, info.approximate_size);
         self.approximate_keys = max(self.approximate_keys, info.approximate_key);
         self.qps += info.get_qps();
@@ -170,6 +162,22 @@ impl RegionInfos {
 
     pub fn get_peer(&self) -> Peer {
         self.infos[0].peer.clone()
+    }
+
+    pub fn get_processed_keys(&self) -> usize {
+        let sum = 0.0;
+        for info in self.infos {
+            let avg = 0;
+            for key_range in info.get_key_ranges_mut() {
+                if let keys = key_range.processed_keys {
+                    avg += keys;
+                }
+            }
+            if avg != 0 {
+                sum += avg / info.get_key_ranges_mut().size() * info.get_qps() / self.qps;
+            }
+        }
+        return sum;
     }
 }
 

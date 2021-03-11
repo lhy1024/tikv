@@ -352,7 +352,7 @@ pub fn check_peer_id(req: &RaftCmdRequest, peer_id: u64) -> Result<()> {
 pub struct KeyRange {
     pub start_key: Vec<u8>,
     pub end_key: Vec<u8>,
-    pub processed_keys_num: Option<usize>,
+    pub processed_keys: Option<usize>,
     pub processed_size: Option<u64>,
     pub scan_sample_keys: Option<Vec<Vec<u8>>>,
 }
@@ -362,7 +362,7 @@ impl KeyRange {
         KeyRange {
             start_key: vec![],
             end_key: vec![],
-            processed_keys_num: None,
+            processed_keys: None,
             processed_size: None,
             scan_sample_keys: None,
         }
@@ -377,7 +377,7 @@ impl KeyRange {
     }
 
     pub fn set_processed_keys_num(&mut self, processed_keys_num: usize) {
-        self.processed_keys_num = Some(processed_keys_num);
+        self.processed_keys = Some(processed_keys_num);
     }
 
     pub fn set_processed_size(&mut self, processed_size: u64) {
