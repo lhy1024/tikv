@@ -460,7 +460,11 @@ impl AutoSplitController {
                     LOAD_BASE_SPLIT_EVENT
                         .with_label_values(&["no fit key"])
                         .inc();
-                };
+                } else {
+                    LOAD_BASE_SPLIT_EVENT
+                        .with_label_values(&["prepare_to_split"])
+                        .inc();
+                }
                 split_infos.push(SplitInfo {
                     region_id,
                     peer,
@@ -470,9 +474,6 @@ impl AutoSplitController {
                 READ_QPS_TOPN
                     .with_label_values(&[&region_id.to_string()])
                     .set(0.0);
-                LOAD_BASE_SPLIT_EVENT
-                    .with_label_values(&["prepare_to_split"])
-                    .inc();
             }
         }
         split_infos
