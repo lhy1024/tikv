@@ -400,11 +400,13 @@ pub fn tls_collect_qps(region_id: u64, peer: &metapb::Peer, key_range: KeyRange)
     });
 }
 
-pub fn tls_collect_sample_key(key: &Key) {
-    TLS_COP_METRICS.with(|m| {
-        let mut m = m.borrow_mut();
-        m.local_sample_keys.append(key.as_encoded().to_vec());
-    });
+pub fn tls_collect_sample_key(key: &Key,processed_keys:usize) {
+    if processed_keys % 100 == 50 {
+        TLS_COP_METRICS.with(|m| {
+            let mut m = m.borrow_mut();
+            m.local_sample_keys.append(key.as_encoded().to_vec());
+        });
+    }
 }
 
 pub fn tls_move_sample_key() -> Vec<Vec<u8>> {

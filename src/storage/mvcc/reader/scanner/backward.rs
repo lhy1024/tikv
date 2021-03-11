@@ -181,7 +181,7 @@ impl<S: Snapshot> BackwardKvScanner<S> {
 
             if let Some(v) = result? {
                 self.statistics.write.processed_keys += 1;
-                tls_collect_sample_key(&current_user_key);
+                tls_collect_sample_key(&current_user_key,self.statistics.write.processed_keys);
                 return Ok(Some((current_user_key, v)));
             }
         }

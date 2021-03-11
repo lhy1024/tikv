@@ -416,7 +416,7 @@ impl<S: Snapshot> ScanPolicy<S> for LatestKvPolicy {
         cursors.move_write_cursor_to_next_user_key(&current_user_key, statistics)?;
         Ok(match value {
             Some(v) => {
-                tls_collect_sample_key(&current_user_key);
+                tls_collect_sample_key(&current_user_key, statistics.write.processed_keys);
                 HandleRes::Return((current_user_key, v))
             }
             _ => HandleRes::Skip(current_user_key),
@@ -531,7 +531,7 @@ impl<S: Snapshot> ScanPolicy<S> for LatestEntryPolicy {
         cursors.move_write_cursor_to_next_user_key(&current_user_key, statistics)?;
         Ok(match entry {
             Some(entry) => {
-                tls_collect_sample_key(&current_user_key);
+                tls_collect_sample_key(&current_user_key, statistics.write.processed_keys);
                 HandleRes::Return(entry)
             }
             _ => HandleRes::Skip(current_user_key),
@@ -739,7 +739,7 @@ impl<S: Snapshot> ScanPolicy<S> for DeltaEntryPolicy {
                 write,
                 old_value,
             }));
-            tls_collect_sample_key(&current_user_key);
+            tls_collect_sample_key(&current_user_key, statistics.write.processed_keys);
             return res;
         }
     }
