@@ -458,7 +458,7 @@ impl AutoSplitController {
                 let split_key = recorder.collect(&self.cfg);
                 if split_key.is_none() {
                     LOAD_BASE_SPLIT_EVENT
-                        .with_label_values(&["split_by_half"])
+                        .with_label_values(&["no fit key"])
                         .inc();
                 };
                 split_infos.push(SplitInfo {

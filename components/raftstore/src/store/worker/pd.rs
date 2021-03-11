@@ -1074,18 +1074,19 @@ where
                                     Callback::None,
                                     String::from("load_base_split"),
                                 )
-                            } else {
-                                let msg = CasualMessage::HalfSplitRegion {
-                                    region_epoch: region.get_region_epoch().clone(),
-                                    policy: pdpb::CheckPolicy::Scan,
-                                    source: "load_base_split",
-                                };
-                                info!("load base split by half");
-                                if let Err(e) = router.send(region_id, PeerMsg::CasualMessage(msg))
-                                {
-                                    error!("load_base_split send halfsplit request failed"; "region_id" => region_id, "err" => ?e);
-                                }
                             }
+                            // else {
+                            //     let msg = CasualMessage::HalfSplitRegion {
+                            //         region_epoch: region.get_region_epoch().clone(),
+                            //         policy: pdpb::CheckPolicy::Scan,
+                            //         source: "load_base_split",
+                            //     };
+                            //     info!("load base split by half");
+                            //     if let Err(e) = router.send(region_id, PeerMsg::CasualMessage(msg))
+                            //     {
+                            //         error!("load_base_split send halfsplit request failed"; "region_id" => region_id, "err" => ?e);
+                            //     }
+                            // }
                         }
                     }
                 };
