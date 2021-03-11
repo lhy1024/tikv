@@ -169,19 +169,28 @@ impl RegionInfos {
     }
 
     pub fn get_processed_keys(&self) -> usize {
-        let mut sum = 0.0;
+        // let mut sum = 0.0;
+        // for info in &self.infos {
+        //     let mut avg = 0.0;
+        //     for key_range in info.get_key_ranges() {
+        //         if let Some(keys) = key_range.processed_keys {
+        //             avg += keys as f64;
+        //         }
+        //     }
+
+        //     sum += avg / (info.get_key_ranges().len() as f64) / (self.qps as f64)
+        //         * (info.get_qps() as f64);
+        // }
+        // return sum as usize;
+        let mut max = 0;
         for info in &self.infos {
-            let mut avg = 0.0;
             for key_range in info.get_key_ranges() {
                 if let Some(keys) = key_range.processed_keys {
-                    avg += keys as f64;
+                    max=std::cmp::max(max,keys);
                 }
             }
-
-            sum += avg / (info.get_key_ranges().len() as f64) / (self.qps as f64)
-                * (info.get_qps() as f64);
         }
-        return sum as usize;
+        return max;
     }
 }
 
