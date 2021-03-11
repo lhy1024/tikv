@@ -417,7 +417,7 @@ impl AutoSplitController {
             let approximate_keys = region_infos.approximate_keys;
             let approximate_size = region_infos.approximate_size;
             let max_scan_keys = region_infos.max_scan_keys;
-            if max_scan_keys > (region_infos.approximate_keys / 10) as usize {
+            if max_scan_keys > (region_infos.approximate_keys / 512) as usize {
                 LOAD_BASE_SPLIT_EVENT
                     .with_label_values(&["hit_copr_keys"])
                     .inc();
