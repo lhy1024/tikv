@@ -443,7 +443,6 @@ impl AutoSplitController {
                 "region_id"=>region_id,
                 "approximate size"=>approximate_size,
                 "processed_keys"=>processed_keys,
-                "region_infos.approximate_keys / 512"=>region_infos.approximate_keys / 512,
                 "approximate keys"=>approximate_keys,
                 "qps"=>qps
             );
