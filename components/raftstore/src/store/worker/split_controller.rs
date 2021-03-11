@@ -447,7 +447,7 @@ impl AutoSplitController {
                 "approximate keys"=>approximate_keys,
                 "qps"=>qps
             );
-            if processed_keys < (region_infos.approximate_keys / 512) as usize {
+            if processed_keys < (self.cfg.key_threshold / 512) as usize {
                 LOAD_BASE_SPLIT_EVENT
                     .with_label_values(&["processed_keys_too_small"])
                     .inc();
