@@ -124,6 +124,10 @@ impl RegionInfo {
         &mut self.reservoir_sampling.results
     }
 
+    fn get_key_ranges(&self) -> &Vec<KeyRange> {
+        &self.reservoir_sampling.results
+    }
+
     fn add_key_ranges(&mut self, key_ranges: Vec<KeyRange>) {
         for key_range in key_ranges {
             self.reservoir_sampling.append(key_range);
@@ -165,19 +169,19 @@ impl RegionInfos {
     }
 
     pub fn get_processed_keys(&self) -> usize {
-        let sum = 0.0;
-        for info in self.infos {
-            let avg = 0;
-            for key_range in info.get_key_ranges_mut() {
-                if let keys = key_range.processed_keys {
-                    avg += keys;
+        let mut sum = 0.0;
+        for info in &self.infos {
+            let mut avg = 0.0;
+            for key_range in info.get_key_ranges() {
+                if let Some(keys) = key_range.processed_keys {
+                    avg += keys as f64;
                 }
             }
-            if avg != 0 {
-                sum += avg / info.get_key_ranges_mut().size() * info.get_qps() / self.qps;
-            }
+
+            sum += avg / (info.get_key_ranges().len() as f64) / (self.qps as f64)
+                * (info.get_qps() as f64);
         }
-        return sum;
+        return sum as usize;
     }
 }
 
@@ -424,12 +428,23 @@ impl AutoSplitController {
 
             let approximate_keys = region_infos.approximate_keys;
             let approximate_size = region_infos.approximate_size;
-            let max_scan_keys = region_infos.max_scan_keys;
-            if max_scan_keys > (region_infos.approximate_keys / 512) as usize {
+            let processed_keys = region_infos.get_processed_keys();
+            info!(
+                "params split region";
+                "region_id"=>region_id,
+                "approximate size"=>approximate_size,
+                "processed_keys"=>processed_keys,
+                "approximate keys"=>approximate_keys,
+                "qps"=>qps
+            );
+            if processed_keys < (region_infos.approximate_keys / 512) as usize {
+                continue;
+            } else {
                 LOAD_BASE_SPLIT_EVENT
                     .with_label_values(&["hit_copr_keys"])
                     .inc();
-            } else if approximate_size < self.cfg.size_threshold
+            }
+            if approximate_size < self.cfg.size_threshold
                 && approximate_keys < self.cfg.key_threshold
             {
                 LOAD_BASE_SPLIT_EVENT
@@ -459,7 +474,7 @@ impl AutoSplitController {
                     "load base split region";
                     "region_id"=>region_id,
                     "approximate size"=>approximate_size,
-                    "scan keys"=>max_scan_keys,
+                    "processed_keys"=>processed_keys,
                     "approximate keys"=>approximate_keys,
                     "qps"=>qps
                 );
