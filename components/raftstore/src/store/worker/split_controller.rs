@@ -186,7 +186,7 @@ impl RegionInfos {
         for info in &self.infos {
             for key_range in info.get_key_ranges() {
                 if let Some(keys) = key_range.processed_keys {
-                    max=std::cmp::max(max,keys);
+                    max = std::cmp::max(max, keys);
                 }
             }
         }
@@ -443,10 +443,14 @@ impl AutoSplitController {
                 "region_id"=>region_id,
                 "approximate size"=>approximate_size,
                 "processed_keys"=>processed_keys,
+                "region_infos.approximate_keys / 512"=>region_infos.approximate_keys / 512,
                 "approximate keys"=>approximate_keys,
                 "qps"=>qps
             );
             if processed_keys < (region_infos.approximate_keys / 512) as usize {
+                LOAD_BASE_SPLIT_EVENT
+                    .with_label_values(&["processed_keys_too_small"])
+                    .inc();
                 continue;
             } else {
                 LOAD_BASE_SPLIT_EVENT
