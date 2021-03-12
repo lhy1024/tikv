@@ -367,14 +367,14 @@ impl AutoSplitController {
         for (region_id, region_infos) in region_infos_map {
             let pre_sum = prefix_sum(region_infos.iter(), RegionInfo::get_qps);
             let qps = *pre_sum.last().unwrap(); // region_infos is not empty
-            if qps < self.cfg.qps_threshold
-                && self.read_flow(&region_infos) < self.cfg.byte_threshold
-            {
+            let byte = self.read_flow(&region_infos);
+            info!("split params";"region_id"=>region_id,"qps"=>qps,"qps_threshold"=>self.cfg.qps_threshold,"byte"=>byte,"byte_threshold"=>self.cfg.byte_threshold);
+            if qps < self.cfg.qps_threshold && byte < self.cfg.byte_threshold {
                 self.recorders.remove_entry(&region_id);
                 continue;
             }
 
-            LOAD_BASE_SPLIT_EVENT.with_label_values(&["qps_fit"]).inc();
+            LOAD_BASE_SPLIT_EVENT.with_label_values(&["load_fit"]).inc();
 
             let num = self.cfg.detect_times;
             let recorder = self
