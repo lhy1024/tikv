@@ -352,11 +352,9 @@ impl AutoSplitController {
     }
 
     fn read_flow(&self, region_infos: &[RegionInfo]) -> usize {
-        let mut flow = 0;
-        for region_info in region_infos {
-            flow += region_info.flow.read_bytes;
-        }
-        flow / self.cfg.detect_times as usize
+        region_infos
+            .iter()
+            .fold(0, |flow, region_info| flow + region_info.flow.read_bytes)
     }
 
     pub fn flush(&mut self, read_stats_vec: Vec<ReadStats>) -> (Vec<usize>, Vec<SplitInfo>) {
