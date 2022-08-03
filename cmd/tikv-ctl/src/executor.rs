@@ -851,6 +851,7 @@ impl DebugExecutor for DebugClient {
         req.set_ts(version);
         DebugClient::reset_to_version(self, &req)
             .unwrap_or_else(|e| perror_and_exit("DebugClient::get_cluster_info", e));
+        println!("reset to version {} request sent", version)
     }
 }
 
