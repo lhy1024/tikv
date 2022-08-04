@@ -2381,6 +2381,12 @@ impl<'a, EK: KvEngine, ER: RaftEngine, T: Transport> StoreFsmDelegate<'a, EK, ER
                 .unwrap()
                 .store_dr_autosync_status(),
         };
+        info!(
+            "task store heartbeat";
+            "store_id" => self.fsm.store.id,
+            "stats" => ?stats,
+            "report" => ?report,
+        );
         if let Err(e) = self.ctx.pd_scheduler.schedule(task) {
             error!("notify pd failed";
                 "store_id" => self.fsm.store.id,

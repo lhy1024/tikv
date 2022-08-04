@@ -576,6 +576,7 @@ where
                         );
                     }
                     if is_enable_tick(timer_cnt, report_min_resolved_ts_interval) {
+                        info!("report_min_resolved_ts task");
                         StatsMonitor::report_min_resolved_ts(
                             &region_read_progress,
                             store_id,
@@ -1177,6 +1178,7 @@ where
         store_report: Option<pdpb::StoreReport>,
         dr_autosync_status: Option<StoreDrAutoSyncStatus>,
     ) {
+        info!("start heartbeat"; "store_id" => self.store_id);
         let disk_stats = match fs2::statvfs(store_info.kv_engine.path()) {
             Err(e) => {
                 error!(
@@ -1291,11 +1293,19 @@ where
 
         let slow_score = self.slow_score.get();
         stats.set_slow_score(slow_score as u64);
-
+        info!(
+            "store heartbeat";
+            "store_id" => self.store_id,
+            "stats" => ?stats,
+            "dr_autosync_status" => ?dr_autosync_status,
+            "store_info" => ?store_info,
+            "store_report" => ?store_report,
+        );
         let router = self.router.clone();
         let resp = self
             .pd_client
             .store_heartbeat(stats, store_report, dr_autosync_status);
+        info!("store heartbeat response"; "store_id" => self.store_id, "resp" => ?resp);
         let f = async move {
             match resp.await {
                 Ok(mut resp) => {
