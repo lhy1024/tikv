@@ -1293,22 +1293,15 @@ where
 
         let slow_score = self.slow_score.get();
         stats.set_slow_score(slow_score as u64);
-        info!(
-            "store heartbeat";
-            "store_id" => self.store_id,
-            "stats" => ?stats,
-            "dr_autosync_status" => ?dr_autosync_status,
-            "store_info" => ?store_info,
-            "store_report" => ?store_report,
-        );
+        info!("heartbeat {:?}", stats);
         let router = self.router.clone();
         let resp = self
             .pd_client
             .store_heartbeat(stats, store_report, dr_autosync_status);
-        info!("store heartbeat response"; "store_id" => self.store_id, "resp" => ?resp);
         let f = async move {
             match resp.await {
                 Ok(mut resp) => {
+                    info!("store heartbeat response{:?}", resp);
                     if let Some(status) = resp.replication_status.take() {
                         let _ = router.send_control(StoreMsg::UpdateReplicationMode(status));
                     }
