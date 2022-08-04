@@ -602,11 +602,12 @@ impl PdClient for RpcClient {
         interval.set_start_timestamp(region_stat.last_report_ts.into_inner());
         interval.set_end_timestamp(UnixSecs::now().into_inner());
         req.set_interval(interval);
+        info!("send heartbeat to PD {:?}", req);
 
         let executor = |client: &Client, req: pdpb::RegionHeartbeatRequest| {
             let mut inner = client.inner.wl();
             if let Either::Left(ref mut left) = inner.hb_sender {
-                debug!("heartbeat sender is refreshed");
+                info!("heartbeat sender is refreshed");
                 let sender = left.take().expect("expect region heartbeat sink");
                 let (tx, rx) = mpsc::unbounded();
                 let pending_heartbeat = Arc::new(AtomicU64::new(0));
@@ -761,6 +762,7 @@ impl PdClient for RpcClient {
         if let Some(status) = dr_autosync_status {
             req.set_dr_autosync_status(status);
         }
+        info!("store heartbeat: {:?}", req);
         let executor = move |client: &Client, req: pdpb::StoreHeartbeatRequest| {
             let feature_gate = client.feature_gate.clone();
             let handler = {
@@ -774,6 +776,7 @@ impl PdClient for RpcClient {
             };
             Box::pin(async move {
                 let resp = handler.await?;
+                info!("store heartbeat response: {:?}", resp);
                 PD_REQUEST_HISTOGRAM_VEC
                     .with_label_values(&["store_heartbeat"])
                     .observe(duration_to_sec(timer.saturating_elapsed()));
@@ -852,6 +855,7 @@ impl PdClient for RpcClient {
 
         let mut req = pdpb::GetGcSafePointRequest::default();
         req.set_header(self.header());
+        info!("get gc safe point: {:?}", req);
 
         let executor = move |client: &Client, req: pdpb::GetGcSafePointRequest| {
             let option = Self::call_option(client);
@@ -865,6 +869,7 @@ impl PdClient for RpcClient {
                 });
             Box::pin(async move {
                 let resp = handler.await?;
+                info!("get gc safe point response: {:?}", resp);
                 PD_REQUEST_HISTOGRAM_VEC
                     .with_label_values(&["get_gc_safe_point"])
                     .observe(duration_to_sec(timer.saturating_elapsed()));
@@ -979,7 +984,10 @@ impl PdClient for RpcClient {
         req.set_header(self.header());
         req.set_store_id(store_id);
         req.set_min_resolved_ts(min_resolved_ts);
-
+        info!(
+            "report min resolved ts: store_id {}, min_resolved_ts {}",
+            store_id, min_resolved_ts
+        );
         let executor = move |client: &Client, req: pdpb::ReportMinResolvedTsRequest| {
             let handler = {
                 let inner = client.inner.rl();
@@ -992,6 +1000,10 @@ impl PdClient for RpcClient {
             };
             Box::pin(async move {
                 let resp = handler.await?;
+                info!(
+                    "report min resolved ts: store_id {}, min_resolved_ts {}",
+                    store_id, min_resolved_ts
+                );
                 PD_REQUEST_HISTOGRAM_VEC
                     .with_label_values(&["min_resolved_ts"])
                     .observe(duration_to_sec(timer.saturating_elapsed()));
