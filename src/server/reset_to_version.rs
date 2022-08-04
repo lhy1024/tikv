@@ -222,9 +222,10 @@ impl ResetToVersionManager {
             .spawn_wrapper(move || {
                 tikv_util::thread_group::set_properties(props);
                 tikv_alloc::add_thread_memory_accessor();
-
+                info!("reset_to_version process start.");
                 while worker.process_next_batch(BATCH_SIZE, &mut wb).expect("reset_to_version failed when removing invalid writes") {
                 }
+                info!("Writes and defaults are removed successfully.");
                 *worker.state.lock()
                         .expect("failed to lock `ResetToVersionWorker::state` in `ResetToVersionWorker::process_next_batch`")
                     = ResetToVersionState::RemovingLock { scanned: 0 };

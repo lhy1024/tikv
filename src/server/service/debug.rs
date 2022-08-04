@@ -531,6 +531,7 @@ impl<ER: RaftEngine, EK: KvEngine, T: RaftStoreRouter<EK> + 'static> debugpb::De
         req: ResetToVersionRequest,
         sink: UnarySink<ResetToVersionResponse>,
     ) {
+        info!("reset_to_version request received");
         self.debugger.reset_to_version(req.get_ts());
         sink.success(ResetToVersionResponse::default());
     }
