@@ -134,8 +134,8 @@ impl ResetToVersionWorker {
         }
         if !wb.is_empty() {
             wb.write().unwrap();
+            wb.clear();
         }
-        wb.clear();
         Ok(has_more)
     }
 
@@ -167,6 +167,7 @@ impl ResetToVersionWorker {
         }
         if !wb.is_empty() {
             wb.write().unwrap();
+            wb.clear();
         }
         Ok(has_more)
     }
