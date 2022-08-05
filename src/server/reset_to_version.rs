@@ -132,7 +132,7 @@ impl ResetToVersionWorker {
             box_try!(wb.delete_cf(CF_WRITE, &key));
             box_try!(wb.delete_cf(CF_DEFAULT, default_key.as_encoded()));
         }
-        if wb.is_empty() {
+        if !wb.is_empty() {
             wb.write().unwrap();
         }
         wb.clear();
@@ -165,7 +165,7 @@ impl ResetToVersionWorker {
                 break;
             }
         }
-        if wb.is_empty() {
+        if !wb.is_empty() {
             wb.write().unwrap();
         }
         Ok(has_more)
