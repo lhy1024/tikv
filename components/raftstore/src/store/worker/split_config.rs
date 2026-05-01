@@ -43,7 +43,7 @@ const DEFAULT_GRPC_THREAD_CPU_OVERLOAD_THRESHOLD_RATIO: f64 = 0.5;
 // thread count *
 // `DEFAULT_UNIFIED_READ_POOL_THREAD_CPU_OVERLOAD_THRESHOLD_RATIO`,
 // the CPU-based split will try to check and record the top hot CPU region.
-const DEFAULT_UNIFIED_READ_POOL_THREAD_CPU_OVERLOAD_THRESHOLD_RATIO: f64 = 0.8;
+const DEFAULT_UNIFIED_READ_POOL_THREAD_CPU_OVERLOAD_THRESHOLD_RATIO: f64 = 0.4;
 // When the Unified Read Poll is hot and the region's CPU usage reaches
 // `REGION_CPU_OVERLOAD_THRESHOLD_RATIO` as a percentage of the Unified Read
 // Poll, it will be added into the hot region list and may be split later as the
